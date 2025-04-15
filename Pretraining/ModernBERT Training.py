@@ -78,6 +78,12 @@ if torch.cuda.is_available():
         logger.info("TensorFloat32 activated for faster matrix multiplications")
 
 def log_memory_usage():
+    """
+    Log an event message with a timestamp appended to the log file.
+
+    Args:
+        message (str): The message to log.
+    """
     proc = psutil.Process(os.getpid())
     ram_usage = proc.memory_info().rss / 1024**2
     gpu_usage = torch.cuda.memory_allocated() / 1024**2 if torch.cuda.is_available() else 0
@@ -90,6 +96,17 @@ def log_memory_usage():
                       f"Reserved: {torch.cuda.memory_reserved(i)/1e9:.2f} GB")
 
 class LazyIterableTextDataset(IterableDataset):
+    """
+    An iterable dataset that reads text files line-by-line from a directory,
+    tokenizes them in batches, shuffles them using a buffer, and yields batches suitable for language modeling.
+
+    Args:
+        data_dir (str): Directory containing .txt files.
+        tokenizer: Tokenizer to encode text.
+        max_length (int, optional): Maximum sequence length. Defaults to 512.
+        shuffle_buffer_size (int, optional): Buffer size for shuffling the text. Defaults to 10000.
+        prefetch_factor (int, optional): Prefetch factor for data loading. Defaults to 5.
+    """
     def __init__(self, data_dir, tokenizer, max_length=512, shuffle_buffer_size=10000, prefetch_factor=5):
         self.data_dir = data_dir
         self.tokenizer = tokenizer
@@ -99,6 +116,13 @@ class LazyIterableTextDataset(IterableDataset):
         self.prefetch_factor = prefetch_factor  # Controls prefetching of data
 
     def __iter__(self):
+        """
+        Iterate over the dataset, reading lines from text files,
+        shuffling with a buffer, batching, and tokenizing each batch.
+
+        Yields:
+            dict: A dictionary with tokenized 'input_ids', 'attention_mask', and 'labels'.
+        """
         worker_info = get_worker_info()
         if worker_info is None:
             file_paths = self.file_paths
@@ -109,8 +133,16 @@ class LazyIterableTextDataset(IterableDataset):
 
         buffer = []
         
-        # Batch processing for efficiency
         def process_batch(text_batch):
+            """
+            Tokenize a batch of text and yield individual encoded examples.
+
+            Args:
+                text_batch (list of str): List of text lines to process.
+
+            Yields:
+                dict: Dictionary containing 'input_ids', 'attention_mask', and 'labels'.
+            """
             encodings = self.tokenizer(
                 text_batch,
                 max_length=self.max_length,
@@ -165,26 +197,26 @@ class LazyIterableTextDataset(IterableDataset):
                 yield from process_batch(batch)
 
 def save_checkpoint(model, tokenizer, optimizer, scheduler, checkpoint_path, accelerator, global_step):
-    """Save model checkpoint with additional training state"""
+    """
+    Save a checkpoint including model, optimizer, scheduler states, and current training step.
+
+    Args:
+        model: The model to save.
+        tokenizer: Tokenizer associated with the model.
+        optimizer: Optimizer whose state to save.
+        scheduler: Learning rate scheduler state.
+        checkpoint_path (str): Path where the checkpoint will be saved.
+        accelerator: Accelerator object for handling distributed training.
+        global_step (int): Current training step.
+    """
     os.makedirs(checkpoint_path, exist_ok=True)
-    
-    # Wait for all processes to sync
     accelerator.wait_for_everyone()
-    
-    # Only save on main process
     if accelerator.is_main_process:
         logger.info(f"Saving checkpoint at step {global_step} to {checkpoint_path}")
-        
-        # Save model config
         unwrapped_model = accelerator.unwrap_model(model)
         unwrapped_model.config.save_pretrained(checkpoint_path)
-        
-        # Save model weights
         accelerator.save_model(unwrapped_model, checkpoint_path)
         
-        # tokenizer.save_pretrained(checkpoint_path)
-        
-        # Save optimizer and scheduler states
         torch.save({
             'optimizer': optimizer.state_dict(),
             'scheduler': scheduler.state_dict(),
@@ -194,25 +226,31 @@ def save_checkpoint(model, tokenizer, optimizer, scheduler, checkpoint_path, acc
         logger.info(f"Checkpoint successfully saved at: {checkpoint_path}")
 
 def evaluate_model(model, val_dataloader, accelerator):
-    """Evaluate model on validation set with optimized performance"""
+    """
+    Evaluate the model on a validation set and compute loss and perplexity.
+
+    Args:
+        model: The model to evaluate.
+        val_dataloader: DataLoader for the validation dataset.
+        accelerator: Accelerator object for distributed evaluation.
+
+    Returns:
+        tuple: Average loss and perplexity.
+    """
     model.eval()
     total_loss = 0
     num_batches = 0
     
     progress_bar = tqdm(val_dataloader, desc="Evaluating", disable=not accelerator.is_local_main_process)
     
-    # Using torch.cuda.amp.autocast for mixed precision during evaluation
     with torch.no_grad(), torch.cuda.amp.autocast(enabled=FP16):
         for batch in progress_bar:
             outputs = model(**batch)
             loss = outputs.loss
-            
-            # Gather loss from all processes
             loss = accelerator.gather(loss).mean()
             total_loss += loss.item()
             num_batches += 1
             
-            # Limit validation to a reasonable number of batches for speed
             if num_batches >= 100:
                 break
     
@@ -223,9 +261,19 @@ def evaluate_model(model, val_dataloader, accelerator):
     return avg_loss, perplexity
 
 def train_model(tokenizer):
-    logger.info("Setting up accelerator for distributed training...")
+    """
+    Set up distributed training, prepare data loaders, and train the model.
     
-    # Initialize accelerator with the right configurations
+    The training loop includes optimizer steps, learning rate scheduling,
+    gradient accumulation, periodic checkpointing, and evaluation.
+    
+    Args:
+        tokenizer: Tokenizer used for data processing.
+    
+    Returns:
+        str: Output directory path where the final model is saved.
+    """
+    logger.info("Setting up accelerator for distributed training...")
     accelerator = Accelerator(
         mixed_precision="fp16" if FP16 else "no",
         gradient_accumulation_steps=GRAD_ACC_STEPS,
@@ -236,13 +284,10 @@ def train_model(tokenizer):
     logger.info(f"Process count: {accelerator.num_processes}")
     logger.info(f"Using device: {accelerator.device}")
     
-    # Get effective batch size accounting for devices and gradient accumulation
     effective_batch_size = BATCH_SIZE * accelerator.num_processes * GRAD_ACC_STEPS
     logger.info(f"Effective batch size: {effective_batch_size}")
     
-    # Set logging interval based on distributed setup
     logging_steps = max(LOGGING_STEPS // accelerator.num_processes, 1)
-    
     logger.info("Loading training and validation data from lazy iterable raw text files...")
     
     train_dataset = LazyIterableTextDataset(TRAIN_DIR, tokenizer, max_length=MAX_LENGTH)
@@ -250,6 +295,15 @@ def train_model(tokenizer):
     
     # Use a specific random seed per process for data loading
     def worker_init_fn(worker_id):
+    """
+    Initialize the random seed for data loader workers to ensure reproducibility.
+
+    This function sets the seed for NumPy and Python's random module based on the worker's
+    unique ID and PyTorch's initial seed, so that each worker produces deterministic random data.
+    
+    Args:
+        worker_id (int): The ID of the data loader worker.
+    """
         worker_seed = torch.initial_seed() % 2**32
         import numpy as np
         np.random.seed(worker_seed)
@@ -537,7 +591,13 @@ def train_model(tokenizer):
     return OUTPUT_DIR
 
 def detailed_memory_profile(model, optimizer=None):
-    """Profile detailed memory usage during training with better categorization"""
+    """
+    Log detailed memory usage including model parameters, largest layers, optimizer state, and CUDA statistics.
+
+    Args:
+        model: The model whose memory usage is profiled.
+        optimizer: (Optional) Optimizer to include in memory profiling.
+    """
     try:
         # Model parameters memory
         total_params_memory = sum(p.element_size() * p.nelement() for p in model.parameters())
@@ -589,49 +649,16 @@ def detailed_memory_profile(model, optimizer=None):
     except Exception as e:
         logger.error(f"Error in memory profiling: {e}")
 
-
-def main():
-    # Configure thread settings for better CPU utilization
-    if torch.get_num_threads() > NUM_WORKER * 2:
-        # Limit threads to avoid CPU oversubscription
-        torch.set_num_threads(NUM_WORKER * 2)
-        logger.info(f"Set PyTorch threads to {NUM_WORKER * 2} for better CPU efficiency")
-    
-    # Initial memory cleanup
-    torch.cuda.empty_cache()
-    gc.collect()
-    
-    # Log system info
-    if torch.cuda.is_available():
-        device_count = torch.cuda.device_count()
-        logger.info(f"Found {device_count} CUDA devices")
-        for i in range(device_count):
-            props = torch.cuda.get_device_properties(i)
-            logger.info(f"CUDA Device {i}: {props.name}, Compute: {props.major}.{props.minor}, "
-                      f"Memory: {props.total_memory/1e9:.2f} GB")
-    
-    # Load tokenizer
-    logger.info(f"Loading tokenizer from {TOKENIZER_PATH}")
-    tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH, local_files_only=True)
-    
-    # Clear memory again after loading tokenizer
-    torch.cuda.empty_cache()
-    gc.collect()
-    
-    # Start training
-    trained_model_path = train_model(tokenizer)
-    
-    # Final cleanup
-    torch.cuda.empty_cache()
-    gc.collect()
-    
-    # Run demo on main process only
-    if Accelerator().is_local_main_process:
-        demo_fill_mask(trained_model_path, tokenizer)
-
 def demo_fill_mask(model_path, tokenizer):
-    """Run a simple demo of the trained model"""
-    print("\nRunning fill-mask pipeline demo:")
+    """
+    Run a simple fill-mask pipeline demonstration with the trained model.
+    
+    Loads a masked language model, runs a demo input, and prints the predictions.
+
+    Args:
+        model_path (str): Path to the trained model.
+        tokenizer: Tokenizer for the model.
+    """    print("\nRunning fill-mask pipeline demo:")
     
     try:
         model = AutoModelForMaskedLM.from_pretrained(model_path)
@@ -645,6 +672,46 @@ def demo_fill_mask(model_path, tokenizer):
             print(f"Prediction: {result['sequence']} (Score: {result['score']:.4f})")
     except Exception as e:
         print(f"Demo error: {e}")
+
+def main():
+    """
+    Main function orchestrating system configuration, data loading, training, and evaluation.
+    
+    Performs the following steps:
+    - Configures CPU thread settings and cleans memory.
+    - Logs system and device information.
+    - Loads the tokenizer.
+    - Invokes training via train_model.
+    - Runs a demonstration fill-mask pipeline after training.
+    """
+    if torch.get_num_threads() > NUM_WORKER * 2:
+        torch.set_num_threads(NUM_WORKER * 2)
+        logger.info(f"Set PyTorch threads to {NUM_WORKER * 2} for better CPU efficiency")
+    
+    torch.cuda.empty_cache()
+    gc.collect()
+    
+    if torch.cuda.is_available():
+        device_count = torch.cuda.device_count()
+        logger.info(f"Found {device_count} CUDA devices")
+        for i in range(device_count):
+            props = torch.cuda.get_device_properties(i)
+            logger.info(f"CUDA Device {i}: {props.name}, Compute: {props.major}.{props.minor}, "
+                      f"Memory: {props.total_memory/1e9:.2f} GB")
+    
+    logger.info(f"Loading tokenizer from {TOKENIZER_PATH}")
+    tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH, local_files_only=True)
+    
+    torch.cuda.empty_cache()
+    gc.collect()
+    
+    trained_model_path = train_model(tokenizer)
+    
+    torch.cuda.empty_cache()
+    gc.collect()
+    
+    if Accelerator().is_local_main_process:
+        demo_fill_mask(trained_model_path, tokenizer)
 
 if __name__ == "__main__":
     main()
