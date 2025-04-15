@@ -26,6 +26,21 @@ from datasets import load_dataset, Dataset, concatenate_datasets, Value
 
 
 def predict_answer(model, tokenizer, question, context, device, max_length=512, doc_stride=128):
+    """
+    Predict the answer span from the context for the given question.
+
+    Args:
+        model: The QA model.
+        tokenizer: The tokenizer associated with the model.
+        question (str): The question to answer.
+        context (str): The context paragraph.
+        device: Torch device (cpu or cuda).
+        max_length (int, optional): Maximum length of tokenized inputs. Defaults to 512.
+        doc_stride (int, optional): Token overlap when splitting long documents. Defaults to 128.
+
+    Returns:
+        str: The decoded answer text.
+    """
     if not isinstance(question, str):
         question = ""
     if not isinstance(context, str):
@@ -53,6 +68,21 @@ def predict_answer(model, tokenizer, question, context, device, max_length=512, 
 
 
 def evaluate_bleu_rouge(model, raw_dataset, tokenizer, device, max_length=512, doc_stride=128, metric="bleu"):
+    """
+    Evaluate the QA model on a raw dataset and compute either BLEU or ROUGE L score.
+
+    Args:
+        model: The QA model.
+        raw_dataset (iterable): A dataset of examples containing "question", "context", and "answer".
+        tokenizer: Tokenizer for preprocessing inputs.
+        device: Torch device (cpu or cuda).
+        max_length (int, optional): Maximum input length. Defaults to 512.
+        doc_stride (int, optional): Document stride size. Defaults to 128.
+        metric (str, optional): Evaluation metric ('bleu' or 'rouge'). Defaults to "bleu".
+
+    Returns:
+        float or None: The average evaluation score (BLEU or ROUGE L) or None if no examples were processed.
+    """
     model.eval()
     total_score = 0
     count = 0
@@ -80,7 +110,31 @@ def train_qa_model(model, train_dataloader, val_raw_dataset, tokenizer, device,
                    num_epochs=3, learning_rate=2e-5, patience=2, checkpoint_path=None,
                    continue_from_checkpoint=False, save_every=None, max_length=512, doc_stride=128,
                    metric="bleu"):
+    """
+    Train the QA model over several epochs and evaluate on a validation set.
+    
+    Implements gradient scaling for mixed precision, early stopping based on a patience value,
+    and checkpointing of the model state when the validation metric improves.
 
+    Args:
+        model: The QA model to train.
+        train_dataloader: DataLoader for training samples.
+        val_raw_dataset: Raw dataset (e.g., list of dicts) for validation.
+        tokenizer: Tokenizer for decoding predictions.
+        device: Torch device (cpu or cuda).
+        num_epochs (int, optional): Number of training epochs. Defaults to 3.
+        learning_rate (float, optional): Learning rate for optimizer. Defaults to 2e-5.
+        patience (int, optional): Number of epochs to wait for improvement before stopping. Defaults to 2.
+        checkpoint_path (str, optional): Path to save model checkpoints. Defaults to None.
+        continue_from_checkpoint (bool, optional): Whether to resume from a checkpoint. Defaults to False.
+        save_every (int, optional): Save a checkpoint every N epochs. Defaults to None.
+        max_length (int, optional): Maximum length for tokenization. Defaults to 512.
+        doc_stride (int, optional): Document stride length. Defaults to 128.
+        metric (str, optional): Evaluation metric to use ("bleu" or "rouge"). Defaults to "bleu".
+
+    Returns:
+        The trained model (with best validation performance if early stopping is triggered).
+    """
     optimizer = AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=learning_rate)
     scaler = torch.amp.GradScaler(device=device)
 
@@ -153,7 +207,19 @@ def train_qa_model(model, train_dataloader, val_raw_dataset, tokenizer, device,
 
 
 class ModernBertForQuestionAnswering(ModernBertPreTrainedModel):
+    """
+    ModernBertForQuestionAnswering implements a question answering model based on ModernBERT.
+
+    This class builds upon ModernBertPreTrainedModel by adding a prediction head
+    for start and end positions and a dropout layer, and it computes the loss if labels are provided.
+    """
     def __init__(self, config: ModernBertConfig):
+        """
+        Initialize ModernBertForQuestionAnswering.
+        
+        Args:
+            config (ModernBertConfig): The model configuration.
+        """
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -184,15 +250,23 @@ class ModernBertForQuestionAnswering(ModernBertPreTrainedModel):
             return_dict: bool = None,
             **kwargs,
     ) -> QuestionAnsweringModelOutput:
-        r"""
-        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Positions outside of the sequence
-            are not taken into account for computing the loss.
-        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Positions outside of the sequence
-            are not taken into account for computing the loss.
+        """
+        Forward pass of the model.
+        
+        Optionally computes the token classification loss for start and end positions if provided.
+
+        Args:
+            input_ids (torch.Tensor): Tensor of input token ids.
+            attention_mask (torch.Tensor, optional): Mask tensor for inputs.
+            sliding_window_mask (torch.Tensor, optional): Mask for sliding window.
+            position_ids (torch.Tensor, optional): Positional ids tensor.
+            start_positions (torch.Tensor, optional): Tensor of start positions for loss calculation.
+            end_positions (torch.Tensor, optional): Tensor of end positions for loss calculation.
+            indices, cu_seqlens, max_seqlen, batch_size, seq_len, output_attentions, output_hidden_states, return_dict: Additional parameters.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            QuestionAnsweringModelOutput: Model outputs including loss (if labels provided), start_logits, end_logits, hidden_states, and attentions.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         self._maybe_set_compile()
@@ -250,6 +324,17 @@ class ModernBertForQuestionAnswering(ModernBertPreTrainedModel):
         )
 
 def get_log_filename(model_name, metric, epochs):
+    """
+    Generate a log filename incorporating model name, metric, epoch count, and current timestamp.
+
+    Args:
+        model_name (str): Name of the model.
+        metric (str): Evaluation metric used (e.g., 'bleu' or 'rouge').
+        epochs (int): Number of training epochs.
+
+    Returns:
+        str: The generated log filename.
+    """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     return f"QA_Benchmark_{model_name}_{metric}_{epochs}ep_{timestamp}.log"
 
@@ -262,6 +347,16 @@ os.makedirs(DATA_DIRECTORY, exist_ok=True)
 
 
 def download_and_extract(url, extract_to="."):
+    """
+    Download a zip file from the provided URL and extract its contents into the specified directory.
+
+    Args:
+        url (str): URL of the zip file to download.
+        extract_to (str, optional): Directory to extract files into. Defaults to current directory.
+
+    Raises:
+        Exception: If the download fails (non-200 status code).
+    """
     logging.info("Downloading and extracting dataset...")
     response = requests.get(url)
     if response.status_code == 200:
@@ -275,6 +370,15 @@ def download_and_extract(url, extract_to="."):
 
 
 def flatten_squad_list(data_list):
+    """
+    Flatten a nested SQuAD-like data structure into a list of QA examples.
+
+    Args:
+        data_list (list): List of articles containing paragraphs and QA pairs.
+
+    Returns:
+        list: A list of dictionaries, each containing 'context', 'question', 'answer', and 'answer_start'.
+    """
     all_rows = []
     for article in data_list:
         for paragraph in article.get("paragraphs", []):
@@ -302,6 +406,15 @@ def flatten_squad_list(data_list):
 
 
 def load_and_flatten_squad(squad_path):
+    """
+    Load the SQuAD dataset from a JSON file, flatten its nested structure, and return a Dataset object.
+
+    Args:
+        squad_path (str): File path to the SQuAD JSON file.
+
+    Returns:
+        Dataset: A Hugging Face Dataset containing flattened QA examples.
+    """
     raw = load_dataset("json", data_files={"train": squad_path})["train"]
     all_flat = []
     for row in raw:
@@ -312,6 +425,15 @@ def load_and_flatten_squad(squad_path):
 
 
 def fix_answer_fields(example):
+    """
+    Ensure that the 'answer' and 'answer_start' fields in a QA example are in the correct format.
+
+    Args:
+        example (dict): A dictionary representing a QA example.
+
+    Returns:
+        dict: The QA example with fixed 'answer' and 'answer_start' fields.
+    """
     if isinstance(example["answer"], list):
         example["answer"] = example["answer"][0] if example["answer"] else ""
     if isinstance(example["answer_start"], list):
@@ -320,6 +442,15 @@ def fix_answer_fields(example):
 
 
 def transform_arcd(example):
+    """
+    Transform ARCD dataset examples by extracting the primary answer information and removing redundant fields.
+
+    Args:
+        example (dict): A dictionary representing an ARCD example.
+
+    Returns:
+        dict: The transformed ARCD example with 'answer' and 'answer_start' fields properly set.
+    """
     if "answers" in example:
         if isinstance(example["answers"], list) and len(example["answers"]) > 0:
             first = example["answers"][0]
@@ -341,6 +472,15 @@ def transform_arcd(example):
 
 
 def squeeze_tokenized(tokenized):
+    """
+    Squeeze extra dimensions from tokenized outputs if they have a singleton batch dimension.
+
+    Args:
+        tokenized (dict): The output dictionary from a tokenizer.
+
+    Returns:
+        dict: The tokenized output with squeezed dimensions.
+    """
     for key in tokenized:
         if isinstance(tokenized[key], torch.Tensor) and tokenized[key].shape[0] == 1:
             tokenized[key] = tokenized[key].squeeze(0)
@@ -348,6 +488,21 @@ def squeeze_tokenized(tokenized):
 
 
 def prepare_qa_features(example, tokenizer, max_length, doc_stride):
+    """
+    Prepare tokenized features for a QA example for training.
+
+    This function tokenizes the question and context, maps the character-level answer position
+    to token positions, and returns a dictionary ready for training.
+
+    Args:
+        example (dict): A QA example containing 'question', 'context', 'answer', and 'answer_start'.
+        tokenizer: The tokenizer to use.
+        max_length (int): Maximum sequence length.
+        doc_stride (int): Document stride for handling long contexts.
+
+    Returns:
+        dict: Tokenized features including input_ids, attention_mask, start_positions, and end_positions.
+    """
     tokenized = tokenizer(
         example["question"],
         example["context"],
@@ -386,6 +541,18 @@ def prepare_qa_features(example, tokenizer, max_length, doc_stride):
 
 
 def tokenize_for_eval(example, tokenizer, max_length, doc_stride):
+    """
+    Tokenize a QA example for evaluation without computing answer positions.
+
+    Args:
+        example (dict): A QA example containing 'question' and 'context'.
+        tokenizer: The tokenizer to use.
+        max_length (int): Maximum sequence length.
+        doc_stride (int): Document stride.
+
+    Returns:
+        dict: Tokenized features for evaluation.
+    """
     tokenized = tokenizer(
         example["question"],
         example["context"],
@@ -396,38 +563,35 @@ def tokenize_for_eval(example, tokenizer, max_length, doc_stride):
     )
     return squeeze_tokenized(tokenized)
 
-def predict_answer(model, tokenizer, question, context, device, max_length=512, doc_stride=128):
-    if not isinstance(question, str):
-        question = ""
-    if not isinstance(context, str):
-        context = ""
-    inputs = tokenizer(
-        question,
-        context,
-        truncation="only_second",
-        max_length=max_length,
-        padding="max_length",
-        return_offsets_mapping=True,
-        return_tensors="pt"
-    )
-    offset_mapping = inputs.pop("offset_mapping")
-    inputs = {k: v.to(device) for k, v in inputs.items()}
-    model.eval()
-    with torch.no_grad():
-        outputs = model(**inputs)
-    start_logits = outputs.start_logits
-    end_logits = outputs.end_logits
-    start_index = torch.argmax(start_logits, dim=1).item()
-    end_index = torch.argmax(end_logits, dim=1).item()
-    tokens = inputs["input_ids"][0][start_index:end_index+1]
-    return tokenizer.decode(tokens, skip_special_tokens=True)
-
-
 def custom_collate_fn(batch):
+    """
+    Custom collate function that uses the default PyTorch collate.
+
+    Args:
+        batch (list): List of items from the dataset.
+
+    Returns:
+        A collated batch.
+    """
     return torch.utils.data.dataloader.default_collate(batch)
 
 
 def load_and_prepare_datasets(tokenizer, max_length, doc_stride):
+    """
+    Load and prepare the QA datasets by combining Arabic-SQuAD and ARCD,
+    applying necessary transformations and tokenization.
+
+    Args:
+        tokenizer: The tokenizer to be used.
+        max_length (int): Maximum sequence length.
+        doc_stride (int): Document stride when tokenizing.
+
+    Returns:
+        tuple: (train_features, test_features, raw_test) where:
+            - train_features: Tokenized training dataset.
+            - test_features: Tokenized test dataset.
+            - raw_test: Original test dataset examples.
+    """
     GITHUB_URL = "https://github.com/WissamAntoun/Arabic_QA_Datasets/raw/master/data.zip"
     DATA_DIR = "./data/data/data/data"
     if not os.path.exists(DATA_DIR):
@@ -466,9 +630,33 @@ def load_and_prepare_datasets(tokenizer, max_length, doc_stride):
         f"Final combined training set has {len(combined_train)} examples.")
 
     def tokenize_qa_for_train(ex):
+        """
+        Tokenize a single QA example for training.
+
+        This function applies the prepare_qa_features transformation using the given tokenizer,
+        maximum sequence length, and document stride.
+
+        Args:
+            ex (dict): A QA example containing keys such as "question", "context", "answer", and "answer_start".
+
+        Returns:
+            dict: Tokenized example with keys for input_ids, attention_mask, start_positions, and end_positions.
+        """
         return prepare_qa_features(ex, tokenizer, max_length, doc_stride)
 
     def tokenize_qa_for_test(ex):
+        """
+        Tokenize a single QA example for evaluation.
+
+        This function applies tokenization for evaluation without computing answer positions,
+        using the given tokenizer, maximum sequence length, and document stride.
+
+        Args:
+            ex (dict): A QA example containing keys such as "question" and "context".
+
+        Returns:
+            dict: Tokenized example suitable for evaluation.
+        """
         return tokenize_for_eval(ex, tokenizer, max_length, doc_stride)
 
     logging.info("Tokenizing combined training set...")
@@ -489,7 +677,13 @@ def load_and_prepare_datasets(tokenizer, max_length, doc_stride):
 
 def main():
     """
-    Arguments:
+    Main entry point for QA model benchmarking.
+    
+    Parses command-line arguments, sets up logging, loads the model and tokenizer,
+    prepares the datasets, trains the QA model, evaluates its performance, and saves results.
+    """
+    """
+    Command-line Arguments:
     - --model-name: Choose between 'arabert' or 'modernbert' models.
     - --max-length: Maximum token sequence length for inputs.
     - --doc-stride: Overlap size when splitting long documents.
