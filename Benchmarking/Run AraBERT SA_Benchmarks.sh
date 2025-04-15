@@ -3,12 +3,10 @@
 # Set parameters
 EPOCHS=200
 PATIENCE=10
-# BATCH_SIZE=16
-# MAX_SIZE=512
-# LEARNING_RATE=2e-5
+
 
 # Create results directory
-RESULTS_DIR="/gpfs/helios/home/abdelrah/ModernBERT/Benchmarking/results"
+RESULTS_DIR="./results"
 mkdir -p $RESULTS_DIR
 
 # Timestamp for the run
