@@ -15,14 +15,24 @@ from farasa.segmenter import FarasaSegmenter
 from datetime import datetime
 
 def log_event(message):
+    """
+    Log an event message with a timestamp to the pipeline.log file.
+
+    Args:
+        message (str): The message to be logged.
+    """
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open("pipeline.log", "a", encoding="utf-8") as log_file:
         log_file.write(f"[{timestamp}] {message}\n")
 
 
-# FILE DOWNLOADER SCRIPT
-
 def create_directory(directory_path):
+    """
+    Create a directory if it does not exist, and log the operation.
+
+    Args:
+        directory_path (str): The path of the directory to create.
+    """
     log_event(f"Attempting to create directory: {directory_path}")
     os.makedirs(directory_path, exist_ok=True)
     log_event(f"Created directory: {directory_path}")
@@ -30,7 +40,14 @@ def create_directory(directory_path):
 
 def download_from_drive(drive_link, output_path):
     """
-    Download a file from Google Drive using its shareable link.
+    Download a file from Google Drive using its shareable link and save to the output path.
+
+    Args:
+        drive_link (str): The shareable Google Drive link.
+        output_path (str): The path where the downloaded file will be saved.
+
+    Raises:
+        ValueError: If the provided drive link is invalid.
     """
     log_event(f"Starting download_from_drive with link: {drive_link}, output_path: {output_path}")
     try:
@@ -52,7 +69,11 @@ def download_from_drive(drive_link, output_path):
 
 def download_direct_link_binary(link, output_path):
     """
-    Download a file in binary mode (useful for compressed files).
+    Download a file in binary mode from a direct link and save it to output_path.
+
+    Args:
+        link (str): The direct URL to the file.
+        output_path (str): The output file path where the binary data will be written.
     """
     log_event(f"Starting download_direct_link_binary with link: {link}, output_path: {output_path}")
     response = requests.get(link, stream=True)
@@ -67,7 +88,11 @@ def download_direct_link_binary(link, output_path):
 
 def download_direct_link_text(link, output_path):
     """
-    Download a file in text mode, decoding each chunk to UTF-8.
+    Download a file in text mode from a direct link and save it as UTF-8 encoded text.
+
+    Args:
+        link (str): The direct URL to the text file.
+        output_path (str): The file path to save the downloaded text.
     """
     log_event(f"Starting download_direct_link_text with link: {link}, output_path: {output_path}")
     response = requests.get(link, stream=True)
@@ -82,7 +107,11 @@ def download_direct_link_text(link, output_path):
 
 def extract_rar(rar_path, extract_to):
     """
-    Extract a .rar archive into the specified folder.
+    Extract a .rar archive to the specified directory.
+
+    Args:
+        rar_path (str): Path to the .rar file.
+        extract_to (str): Directory where files will be extracted.
     """
     log_event(f"Starting extract_rar with rar_path: {rar_path}, extract_to: {extract_to}")
     with rarfile.RarFile(rar_path) as rf:
@@ -94,7 +123,11 @@ def extract_rar(rar_path, extract_to):
 
 def extract_bz2(bz2_path, output_path):
     """
-    Extract a .bz2 file to a specified output path (decompressed).
+    Extract a .bz2 file and write its decompressed content to the output path.
+
+    Args:
+        bz2_path (str): Path to the .bz2 file.
+        output_path (str): File path where the decompressed content is saved.
     """
     log_event(f"Starting extract_bz2 with bz2_path: {bz2_path}, output_path: {output_path}")
     with bz2.BZ2File(bz2_path, "rb") as bz_file:
@@ -107,8 +140,12 @@ def extract_bz2(bz2_path, output_path):
 
 def process_text_links(links, output_folder):
     """
-    Downloads links intended to be .txt files.
-    Logs the dataset name (key in the JSON) along with the process.
+    Download text files from the provided links and save them to output_folder.
+    Supports dictionary input (mapping dataset name to link) or a list of links.
+
+    Args:
+        links (dict or list): Collection of links (or mapping of names to links).
+        output_folder (str): Directory where the downloaded text files will be stored.
     """
     log_event(f"Starting process_text_links into folder: {output_folder}")
     create_directory(output_folder)
@@ -166,8 +203,12 @@ def process_text_links(links, output_folder):
 
 def process_compressed_xml_links(links, output_folder):
     """
-    Downloads compressed .rar/.bz2 files, then extracts them into XML.
-    Logs the dataset name (key in the JSON) along with the process.
+    Download compressed XML files (RAR or BZ2), extract them, and clean up temporary files.
+    Supports both dictionary mapping and list of links.
+
+    Args:
+        links (dict or list): Collection of compressed file links.
+        output_folder (str): Directory where the extracted XML files will be stored.
     """
     log_event(f"Starting process_compressed_xml_links into folder: {output_folder}")
     create_directory(output_folder)
@@ -237,8 +278,6 @@ def process_compressed_xml_links(links, output_folder):
         log_event(message)
 
 
-# One Billion PROCESSOR SCRIPT
-
 def remove_files(directory, prefix=None, extension=None):
     """
     Removes files in the specified directory.
@@ -246,6 +285,11 @@ def remove_files(directory, prefix=None, extension=None):
     - If only `extension` is provided, removes all files with that extension.
     - If `prefix` and `extension` are provided, removes files that start with `prefix` and have the `extension`.
     - If `prefix` is provided without `extension`, removes all files that start with `prefix`.
+    
+    Args:
+        directory (str): Directory to search for files.
+        prefix (str, optional): If provided, only files starting with this prefix will be removed.
+        extension (str, optional): If provided, only files ending with this extension will be removed.
     """
     for file_name in os.listdir(directory):
         file_path = os.path.join(directory, file_name)
@@ -265,17 +309,27 @@ def remove_files(directory, prefix=None, extension=None):
                     log_event(f"Deleted: {file_path}")
 
 def normalize_arabic_word(word):
-    # Remove one or more occurrences of the tatweel character (ـ)
+    """
+    Normalize an Arabic word by removing tatweel characters.
+
+    Args:
+        word (str): The Arabic word to normalize.
+
+    Returns:
+        str: The normalized word without tatweel characters.
+    """
     return re.sub(r'ـ+', '', word)
 
 
 def extract_text_blocks(input_directory, output_directory):
     """
-    Extracts <Text> blocks from XML files in input_directory and writes them as .txt files in output_directory.
-    - For each <Text> block, lines are combined until an empty line is encountered.
-    - Once an empty line is found (or we're at the end), we check if the combined chunk has at least 100 words
-      or up to 8000 words (the code uses >=100 or <=8000 condition).
-    - If valid, write that chunk as one line to the output file.
+    Extract <Text> blocks from XML files in the input directory and save each valid block as a line in a text file.
+
+    The function checks that each extracted block has between 100 and 8000 words (inclusive).
+    
+    Args:
+        input_directory (str): Directory containing XML files.
+        output_directory (str): Directory where processed text files will be saved.
     """
     log_event(f"Starting extract_text_blocks from {input_directory} to {output_directory}")
     os.makedirs(output_directory, exist_ok=True)
@@ -328,8 +382,6 @@ def extract_text_blocks(input_directory, output_directory):
             print(f"Extracted text written to: {output_file_path}")
 
 
-# TEXT PROCESSOR SCRIPT
-
 def process_text_files(input_directory, output_directory):
     """
     Processes text files by reading each line and applying the following logic:
@@ -341,6 +393,10 @@ def process_text_files(input_directory, output_directory):
     2. If a line does NOT start with a numeric prefix, use the line as is.
 
     3. In either case, only keep the line if it contains at least 100 words.
+    
+    Args:
+        input_directory (str): Directory containing the original text files.
+        output_directory (str): Directory where processed text files will be saved.
     """
     log_event(f"Starting process_text_files from {input_directory} to {output_directory}")
     os.makedirs(output_directory, exist_ok=True)
@@ -410,17 +466,25 @@ def process_text_files(input_directory, output_directory):
 
 def clean_text(text):
     """
-    Cleans Arabic text by removing specified punctuation and extra whitespace.
+    Clean Arabic text by removing punctuation and extra whitespace.
+
+    Args:
+        text (str): The input text to clean.
+
+    Returns:
+        str: The cleaned text.
     """
     return re.sub(r'\s+', ' ', re.sub(r'[.,;،؛]', '', text)).strip()
 
 
 def process_xml_file(input_file_path, output_file_path):
-    """
-    Parses an XML file, extracts Arabic words from each text element,
-    combines consecutive non-empty lines into a full sentence (stopping at an empty line),
-    cleans the sentence using clean_text, and writes the sentence to the output file
-    only if it contains at least 100 words.
+   """
+    Process a single XML file by extracting text from <text> elements, combining non-empty lines,
+    cleaning the text, and writing the result to a text file if it contains at least 100 words.
+
+    Args:
+        input_file_path (str): Path to the input XML file.
+        output_file_path (str): Path where the processed text file will be saved.
     """
     log_event(f"Starting process_xml_file: {input_file_path} -> {output_file_path}")
     with open(output_file_path, "w", encoding="utf-8") as output_file:
@@ -457,8 +521,12 @@ def process_xml_file(input_file_path, output_file_path):
 
 def process_xml(input_directory, output_directory):
     """
-    Processes all XML files in the input_directory, applies the extraction and cleaning process,
-    and writes the output for each file to the output_directory with a .txt extension.
+    Process all XML files in the input directory by applying process_xml_file and saving the outputs
+    in the specified output directory.
+
+    Args:
+        input_directory (str): Directory containing XML files.
+        output_directory (str): Directory where processed text files will be saved.
     """
     log_event(f"Starting process_directory from {input_directory} to {output_directory}")
     os.makedirs(output_directory, exist_ok=True)
@@ -472,11 +540,17 @@ def process_xml(input_directory, output_directory):
     log_event(f"Completed process_directory from {input_directory}")
 
 
-# SEGMENTATION PROCESSOR SCRIPT
-
 def safe_segment(segmenter, text):
     """
-    Attempts to segment text using Farasa.
+    Safely segment the input text using the provided Farasa segmenter.
+    Handles UnicodeDecodeError by logging the error and returning None.
+
+    Args:
+        segmenter (FarasaSegmenter): An instance of FarasaSegmenter.
+        text (str): The text to be segmented.
+
+    Returns:
+        str or None: The segmented text, or None if an error occurred.
     """
     try:
         return segmenter.segment(text)
@@ -489,11 +563,13 @@ def safe_segment(segmenter, text):
 
 def apply_segmentation_to_file(input_file, output_base, segmenter, batch_size=100000):
     """
-    Reads a text file in chunks of batch_size lines, applies Farasa segmentation to each line,
-    and writes each processed chunk to a separate output file.
+    Apply Farasa segmentation to an input text file in chunks, writing each chunk to a new output file.
 
-    The function reads N rows from the file, processes them, writes the output,
-    then continues with the next N rows until the file is fully processed.
+    Args:
+        input_file (str): Path to the input text file.
+        output_base (str): Base path for the output files.
+        segmenter (FarasaSegmenter): The FarasaSegmenter instance for segmentation.
+        batch_size (int, optional): Number of lines to process per chunk. Defaults to 100000.
     """
     log_event(f"Starting apply_segmentation_to_file: {input_file} -> {output_base}")
 
@@ -537,9 +613,12 @@ def apply_segmentation_to_file(input_file, output_base, segmenter, batch_size=10
 
 def Segmenting_data(output_directory, batch_size=1000):
     """
-    Processes all text files in the output_directory whose names match specific patterns.
-    For each file, segmentation is applied in chunks of batch_size lines, and segmented output
-    is written to separate files.
+    Process all text files in the specified directory that start with 'processed_' and end with '.txt',
+    applying Farasa segmentation in batches and writing the segmented output to new files.
+
+    Args:
+        output_directory (str): Directory containing processed text files to segment.
+        batch_size (int, optional): Number of lines to process per batch. Defaults to 1000.
     """
     log_event(f"Starting Segmenting_data in directory: {output_directory}")
     farasa_segmenter = FarasaSegmenter(interactive=True)
@@ -559,9 +638,19 @@ def Segmenting_data(output_directory, batch_size=1000):
     log_event(f"Completed Segmenting_data in directory: {output_directory}")
 
 
-# MAIN SCRIPT PIPELINE
-
 def main():
+    """
+    Main script pipeline that executes the complete data downloading, processing, extraction,
+    segmentation, and logging workflow for various datasets.
+
+    The pipeline:
+    - Reads link configurations from 'links.json'.
+    - Downloads and extracts One Billion datasets if not already extracted.
+    - Processes XML and text files.
+    - Segments processed files using Farasa segmentation.
+    - Logs all events to 'pipeline.log'.
+    """
+    
     log_event("Starting main script execution.")
     text_dir = "txt_files"
     xml_dir = "xml_files"
