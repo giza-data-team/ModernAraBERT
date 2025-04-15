@@ -62,9 +62,24 @@ OUTPUT_ROOT = os.path.join(BASE_DIR, "tokenized")
 os.makedirs(OUTPUT_ROOT, exist_ok=True)
 
 def memory_usage():
+   """
+    Get the current process memory usage.
+    
+    Returns:
+        str: Memory usage in MB formatted as a string.
+    """
     return f"{psutil.Process().memory_info().rss / 1024 ** 2:.2f} MB"
 
 def text_generator(input_dirs):
+   """
+    Generator function that yields lines of text from all .txt files in the specified directories.
+    
+    Args:
+        input_dirs (dict): Dictionary mapping split names to directory paths.
+    
+    Yields:
+        str: Each stripped line of text from the files.
+    """
     for split, input_dir in input_dirs.items():
         if not os.path.exists(input_dir):
             continue
@@ -77,6 +92,17 @@ def text_generator(input_dirs):
                         yield line.strip()
 
 def remove_special_tokens(text):
+   """
+    Remove special segmentation tokens (prefixes and suffixes) from Arabic text.
+    
+    This function uses regex patterns to remove affixes with segmentation markers.
+    
+    Args:
+        text (str): Input text to clean.
+    
+    Returns:
+        str: The text with special tokens removed.
+    """
     prefixes = ['ال', 'و', 'ف', 'ب', 'ل', 'ك', 'س']
     prefix_pattern = re.compile(r'\b(?:'+'|'.join([x + '\+' for x in prefixes])+r')')
     suffixes = ['ه', 'ها', 'هم', 'نا', 'كم', 'تم', 'ون', 'ين', 'ات', 'ة', 'وا']
@@ -84,6 +110,29 @@ def remove_special_tokens(text):
     return re.sub(suffixes_pattern, '', re.sub(prefix_pattern, '', text))
 
 def analyze_vocab_distribution(text_generator, min_freq=20, max_vocab_size=80000):
+   """
+    Analyze and filter vocabulary distribution from a text generator.
+    
+    This function computes the frequency distribution of both base words and full words 
+    using a refined Arabic regex pattern. It then collects common words based on a 
+    minimum frequency threshold and a high-frequency cutoff. Special prefix and suffix 
+    tokens (with segmentation markers) are explicitly added. Finally, the vocabulary 
+    is capped to a maximum size.
+    
+    Args:
+        text_generator (callable): A generator function yielding text strings.
+        min_freq (int, optional): Minimum frequency a base word must have to be included.
+                                  Defaults to 20.
+        max_vocab_size (int, optional): Maximum size of the vocabulary. Defaults to 80000.
+    
+    Returns:
+        tuple:
+            - Counter: Frequency count of base words.
+            - Counter: Frequency count of full words.
+            - dict: Vocabulary statistics including total unique base words, unique full words,
+                    and the final vocabulary size.
+            - set: The final set of common words (the vocabulary).
+    """
     arabic_pattern = re.compile(r'[\u0621-\u063A\u0641-\u064A]+')  
 
     base_word_freq = Counter()
