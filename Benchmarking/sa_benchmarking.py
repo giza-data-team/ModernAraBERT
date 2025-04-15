@@ -28,31 +28,73 @@ from farasa.segmenter import FarasaSegmenter
 farasa_segmenter = FarasaSegmenter(interactive=True)
 
 def preprocess_with_farasa(text):
-    """Apply Farasa segmentation and clean text."""
+    """
+    Apply Farasa segmentation on input text after cleaning it of punctuation and special characters.
+
+    Args:
+        text (str): The raw Arabic text.
+
+    Returns:
+        str: The segmented and cleaned text.
+    """
     text = re.sub(r'[()\[\]:«»“”‘’—_,;!?|/\\]', '', text)
     text = re.sub(r'(\-\-|\[\]|\.\.)', '', text)
     return farasa_segmenter.segment(text)
 
 def fix_punctuation_spacing(text):
-    """Fix Arabic punctuation spacing issues."""
+    """
+    Fix spacing issues around punctuation in Arabic text.
+
+    Args:
+        text (str): Input text with potential spacing issues around punctuation.
+
+    Returns:
+        str: The text with corrected punctuation spacing.
+    """
     text = re.sub(r'\s+([؟،,.!؛:])', r'\1', text)
     text = re.sub(r'([؟،,.!؛:])([^\s])', r'\1 \2', text)
     text = re.sub(r'\s{2,}', ' ', text)
     return text.strip()
 
 def is_arabic_text(text):
-    """Check if text contains Arabic characters."""
+    """
+    Check if the given text consists only of Arabic characters (and allowed punctuation).
+
+    Args:
+        text (str): Input text.
+
+    Returns:
+        bool: True if the text matches the Arabic characters pattern, otherwise False.
+    """
     arabic_pattern = re.compile(r'^[\u0600-\u06FF\s.,،؛؟!:\-–—«»“”‘’…(){}\[\]/ـ]+$')
     return bool(arabic_pattern.match(text))
 
 def split_text_into_chunks(text, window_size):
-    """Split text into chunks of max window_size words."""
+    """
+    Split text into chunks containing up to 'window_size' words each.
+
+    Args:
+        text (str): The input text.
+        window_size (int): The maximum number of words per chunk.
+
+    Returns:
+        list of str: A list of text chunks.
+    """
     words = text.split()
     return [" ".join(words[i:i+window_size]).strip()
             for i in range(0, len(words), window_size) if words[i:i+window_size]]
 
 def process_text(text, window_size=8192):
-    """Apply full text processing: segmentation, punctuation fixes, and chunking."""
+    """
+    Process Arabic text by applying Farasa segmentation, fixing punctuation, and splitting into chunks.
+
+    Args:
+        text (str): The raw Arabic text.
+        window_size (int, optional): Maximum number of words in a chunk. Defaults to 8192.
+
+    Returns:
+        list of str: A list containing one or more processed text chunks.
+    """
     processed_text = preprocess_with_farasa(text)
     processed_text = fix_punctuation_spacing(processed_text)
     words = processed_text.split()
@@ -62,6 +104,26 @@ def process_text(text, window_size=8192):
 
 def train_model(model, train_dataloader, val_dataloader, device, num_epochs=3, learning_rate=2e-5, patience=2,
                 checkpoint_path=None, continue_from_checkpoint=False, save_every=None):
+    """
+    Train a model on a training DataLoader with validation evaluation and early stopping.
+
+    Uses gradient scaling (for mixed precision with CUDA) and saves checkpoints if specified.
+
+    Args:
+        model: The model to train.
+        train_dataloader (DataLoader): Dataloader for training data.
+        val_dataloader (DataLoader): Dataloader for validation data.
+        device: Torch device (e.g., "cuda" or "cpu").
+        num_epochs (int, optional): Number of epochs. Defaults to 3.
+        learning_rate (float, optional): Learning rate. Defaults to 2e-5.
+        patience (int, optional): Patience for early stopping. Defaults to 2.
+        checkpoint_path (str, optional): Path to save model checkpoint. Defaults to None.
+        continue_from_checkpoint (bool, optional): Whether to resume training from checkpoint. Defaults to False.
+        save_every (int, optional): Save a checkpoint every N epochs. Defaults to None.
+
+    Returns:
+        model: The trained model (best version if early stopping occurred).
+    """
     optimizer = AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=learning_rate)
     if device.type == "cuda":
         scaler = torch.cuda.amp.GradScaler()
@@ -132,6 +194,19 @@ def train_model(model, train_dataloader, val_dataloader, device, num_epochs=3, l
     return model
 
 def evaluate_model(model, eval_dataloader, device):
+    """
+    Evaluate a trained model on a given evaluation DataLoader.
+
+    Computes loss, accuracy, perplexity, and returns a detailed classification report.
+
+    Args:
+        model: The model to evaluate.
+        eval_dataloader (DataLoader): Dataloader for evaluation data.
+        device: Torch device (e.g., "cuda" or "cpu").
+
+    Returns:
+        tuple: (accuracy, classification_report, predictions, true_labels, confidences, average_loss, perplexity)
+    """
     model.eval()
     all_preds = []
     all_labels = []
@@ -179,6 +254,17 @@ def evaluate_model(model, eval_dataloader, device):
 # Dataset and Text Preprocessing routines 
 
 def process_dataset(dataset: Dataset, window_size: int, base_dir: str):
+    """
+    Process and segment texts from a dataset, then split them into train, test, and validation sets.
+
+    This function extracts the text, applies segmentation and filtering (only if the text contains valid Arabic),
+    and saves the processed chunks into separate TXT files for each split.
+
+    Args:
+        dataset (Dataset): Hugging Face Dataset containing examples with a "text" field.
+        window_size (int): Maximum number of words per text chunk.
+        base_dir (str): Directory where the split files will be saved.
+    """
     print("Processing and segmenting texts...")
     processed_texts = []
     processed_ids = []
@@ -226,6 +312,23 @@ def process_dataset(dataset: Dataset, window_size: int, base_dir: str):
     print("Files saved: train.txt, test.txt, validation.txt")
 
 def load_sentiment_dataset(file_path, tokenizer, arrow_table, num_labels, max_length=512, dataset_type="default"):
+    """
+    Load and tokenize a sentiment dataset from a text file.
+
+    Reads a tab-separated file where each line contains an id, text, and label.
+    Converts labels based on dataset type and tokenizes the text using the provided tokenizer.
+
+    Args:
+        file_path (str): Path to the sentiment dataset file.
+        tokenizer: Tokenizer to process the text.
+        arrow_table: (Unused) Placeholder for future use.
+        num_labels (int): Number of label classes.
+        max_length (int, optional): Maximum tokenized sequence length. Defaults to 512.
+        dataset_type (str, optional): Type of dataset (e.g., "default", "ajgt", "labr", "astd"). Defaults to "default".
+
+    Returns:
+        list: A list of tokenized samples with associated labels.
+    """
     samples = []
     ratings = []
     
@@ -326,6 +429,16 @@ def load_sentiment_dataset(file_path, tokenizer, arrow_table, num_labels, max_le
     return tokenized_samples
 
 def prepare_astd_benchmark(data_dir, astd_info):
+    """
+    Prepare benchmark files for the ASTD dataset.
+
+    Reads the main ASTD data and benchmark split IDs, merges them to form train, test, and validation files,
+    and saves these files as tab-separated text files.
+
+    Args:
+        data_dir (str): Directory in which to save the benchmark files.
+        astd_info (dict): Dictionary containing URLs and file information for the ASTD dataset.
+    """
     os.makedirs(data_dir, exist_ok=True)
     main_df = pd.read_csv(
         astd_info["url"],
@@ -355,6 +468,16 @@ def prepare_astd_benchmark(data_dir, astd_info):
     print(f"ASTD benchmark files prepared in {data_dir}")
 
 def prepare_labr_benchmark(data_dir, labr_info):
+    """
+    Prepare benchmark files for the LABR dataset.
+
+    Loads the LABR dataset from a given URL, cleans and processes the data, 
+    merges benchmark IDs with the main dataset, and saves train and test files.
+
+    Args:
+        data_dir (str): Directory to save the benchmark files.
+        labr_info (dict): Dictionary containing URLs and column names for LABR.
+    """
     os.makedirs(data_dir, exist_ok=True)
     
     main_df = pd.read_csv(
@@ -455,6 +578,18 @@ args = parser.parse_args()
 
 # Generate a unique log filename based on model, epochs, patience, and timestamp
 def get_log_filename(model_name, epochs, patience, dataset_name):
+    """
+    Generate a unique log filename based on model name, epoch count, patience, dataset, and current timestamp.
+
+    Args:
+        model_name (str): The name of the model.
+        epochs (int): Number of epochs.
+        patience (int): Early stopping patience value.
+        dataset_name (str): The selected dataset name.
+
+    Returns:
+        str: The generated log filename.
+    """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     return f"SA_Benchmark_{model_name}_{dataset_name}_{epochs}ep_p{patience}_{timestamp}.log"
 
@@ -599,6 +734,18 @@ if __name__ == '__main__':
         VAL_FILE if chosen_dataset != "labr" else TEST_FILE)
 
     def main():
+        """
+        Main function for running sentiment analysis benchmarking.
+
+        Loads model and tokenizer, processes datasets, trains the model, evaluates its performance,
+        and saves both the final model and the benchmarking results.
+
+        This function orchestrates the complete workflow:
+            - Device selection and logging.
+            - Loading data and preparing dataloaders.
+            - Training the model with early stopping and checkpointing.
+            - Evaluating model performance and saving results.
+        """
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         logging.info(f"Using device: {device}")
         print(f"Using device: {device}")
