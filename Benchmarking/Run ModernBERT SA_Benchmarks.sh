@@ -3,12 +3,9 @@
 # Set parameters
 EPOCHS=200
 PATIENCE=10
-# BATCH_SIZE=16
-# MAX_SIZE=512
-# LEARNING_RATE=2e-5
 
 # Create results directory
-RESULTS_DIR="/gpfs/helios/home/abdelrah/ModernBERT/Benchmarking/results"
+RESULTS_DIR="./results"
 mkdir -p $RESULTS_DIR
 
 # Timestamp for the run
@@ -30,11 +27,6 @@ for MODEL in "${MODELS[@]}"; do
         echo "=====================================================" | tee -a $RUN_LOG
         echo "Starting benchmark for MODEL=${MODEL}, DATASET=${DATASET}" | tee -a $RUN_LOG
         echo "Started at: $(date)" | tee -a $RUN_LOG
-        
-        # Create checkpoint directory for this run
-        # CHECKPOINT_DIR="${RESULTS_DIR}/${MODEL}_${DATASET}_${TIMESTAMP}"
-        # mkdir -p $CHECKPOINT_DIR
-        # CHECKPOINT="${CHECKPOINT_DIR}/model.pt"
         
         # Execute the benchmarking script
         echo "Running: python sa_benchmarking.py --model-name $MODEL --dataset $DATASET --epochs $EPOCHS --patience $PATIENCE " | tee -a $RUN_LOG
