@@ -313,7 +313,7 @@ def process_dataset(dataset: Dataset, window_size: int, base_dir: str):
     print("Dataset segmentation and splitting complete.")
     print("Files saved: train.txt, test.txt, validation.txt")
 
-def load_sentiment_dataset(file_path, tokenizer, max_length=512):
+def load_sentiment_dataset(file_path, tokenizer, max_length=512, dataset_type="hard"):
     """
     Load and tokenize a sentiment dataset from a preprocessed text file.
     
@@ -321,13 +321,54 @@ def load_sentiment_dataset(file_path, tokenizer, max_length=512):
         file_path (str): Path to the preprocessed dataset file.
         tokenizer: Tokenizer to process the text.
         max_length (int, optional): Maximum tokenized sequence length.
+        dataset_type (str): Type of dataset ('hard', 'astd', 'labr', 'ajgt')
     
     Returns:
         datasets.Dataset: A tokenized dataset ready for training, or None if file_path is None
     """
     if file_path is None:
         return None
-        
+
+    def convert_label(label_str, dataset_type):
+        """Helper function to convert labels based on dataset type."""
+        def is_numeric(s):
+            try:
+                float(s)
+                return True
+            except Exception:
+                return False
+
+        label_str = label_str.strip().replace("|", "").strip()
+        if label_str == "":
+            return None
+
+        if dataset_type.lower() == "ajgt":
+            if is_numeric(label_str):
+                rating = int(float(label_str))
+                return rating
+            mapping = {"positive": 1, "negative": 0, "pos": 1, "neg": 0}
+            return mapping.get(label_str.lower())
+
+        elif dataset_type.lower() == "labr":
+            if is_numeric(label_str):
+                rating = int(float(label_str))
+                if rating == 3:
+                    return None
+                return 0 if rating < 3 else 1
+            mapping = {"OBJ": 0, "NEG": 0, "POS": 1, "MIX": 1}
+            return mapping.get(label_str.upper())
+
+        elif dataset_type.lower() == "astd":
+            mapping = {"obj": 0, "pos": 1, "neg": 2, "neu": 3, "neutral": 3}
+            return mapping.get(label_str.lower())
+
+        else:  # default/hard dataset
+            if is_numeric(label_str):
+                rating = int(float(label_str))
+                return 0 if rating <= 1 else 1
+            mapping = {"OBJ": 0, "NEUTRAL": 0, "NEG": 1, "POS": 1, "MIX": 1}
+            return mapping.get(label_str.upper())
+
     # Load the dataset using Hugging Face's datasets
     dataset = load_dataset(
         'text',
@@ -335,14 +376,30 @@ def load_sentiment_dataset(file_path, tokenizer, max_length=512):
         delimiter='\t',
         column_names=['id', 'text', 'label']
     )['data']
-    
+
+    # Convert labels based on dataset type
+    def process_example(example):
+        converted_label = convert_label(str(example['label']), dataset_type)
+        if converted_label is None:
+            return None
+        example['label'] = converted_label
+        return example
+
+    # Filter and process examples
+    dataset = dataset.map(
+        process_example,
+        remove_columns=dataset.column_names,
+        load_from_cache_file=False
+    )
+    dataset = dataset.filter(lambda x: x is not None)
+
     def tokenize_function(examples):
         return tokenizer(
             examples["text"],
             padding="max_length",
             truncation=True,
             max_length=max_length,
-            return_tensors=None,  # Don't convert to tensors yet - DataLoader will handle this
+            return_tensors=None,
             return_token_type_ids=False
         )
     
@@ -350,9 +407,15 @@ def load_sentiment_dataset(file_path, tokenizer, max_length=512):
     tokenized_dataset = dataset.map(
         tokenize_function,
         batched=True,
-        remove_columns=['id', 'text']  # Remove columns we don't need for training
+        remove_columns=['id', 'text']
     )
     tokenized_dataset = tokenized_dataset.with_format("torch")
+
+    if len(tokenized_dataset) == 0:
+        logging.warning(f"No valid samples loaded from {file_path}.")
+    else:
+        labels = tokenized_dataset['label']
+        logging.info(f"Loaded {len(tokenized_dataset)} samples from {file_path}. Label range: min={min(labels)}, max={max(labels)}")
     
     return tokenized_dataset
 
@@ -585,9 +648,9 @@ def configure_model(model_name, model_path, num_labels, device, freeze=False):
     tokenizer_path = model_path if model_name == "arabert" else MODERN_BERT_TOKENIZER_PATH
     
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, token=HF_TOKEN)
-    model = AutoModelForSequenceClassification.from_pretrained(model_path, token=HF_TOKEN)
     
     config = AutoConfig.from_pretrained(model_path, num_labels=num_labels, token=HF_TOKEN)
+    model = AutoModelForSequenceClassification.from_config(config)
     model.classifier = nn.Linear(model.config.hidden_size, num_labels)
     
     if freeze:
@@ -741,7 +804,8 @@ if __name__ == '__main__':
         train_dataset = load_sentiment_dataset(
             TRAIN_FILE,
             tokenizer,
-            max_length=args.max_size
+            max_length=args.max_size,
+            dataset_type=args.dataset_name
         )
         if len(train_dataset) == 0:
             logging.error(f"No training samples loaded for model {model_name}.")
@@ -760,7 +824,8 @@ if __name__ == '__main__':
             val_dataset = load_sentiment_dataset(
                 VAL_FILE,
                 tokenizer,
-                max_length=args.max_size
+                max_length=args.max_size,
+                dataset_type=args.dataset_name
             )
             if len(val_dataset) == 0:
                 logging.error(f"No validation samples loaded for model {model_name}.")
@@ -786,7 +851,8 @@ if __name__ == '__main__':
         test_dataset = load_sentiment_dataset(
             TEST_FILE,
             tokenizer,
-            max_length=args.max_size
+            max_length=args.max_size,
+            dataset_type=args.dataset_name
         )
         
         test_dataloader = create_dataloader(test_dataset, args.batch_size, args.num_workers, shuffle=False)
