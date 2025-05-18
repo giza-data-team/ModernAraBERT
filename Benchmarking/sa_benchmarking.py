@@ -37,7 +37,7 @@ def preprocess_with_farasa(text):
     Returns:
         str: The segmented and cleaned text.
     """
-    text = re.sub(r'[()\[\]:«»“”‘’—_,;!?|/\\]', '', text)
+    text = re.sub(r'[()\[\]:«»""''—_,;!?|/\\]', '', text)
     text = re.sub(r'(\-\-|\[\]|\.\.)', '', text)
     return farasa_segmenter.segment(text)
 
@@ -66,7 +66,7 @@ def is_arabic_text(text):
     Returns:
         bool: True if the text matches the Arabic characters pattern, otherwise False.
     """
-    arabic_pattern = re.compile(r'^[\u0600-\u06FF\s.,،؛؟!:\-–—«»“”‘’…(){}\[\]/ـ]+$')
+    arabic_pattern = re.compile(r'^[\u0600-\u06FF\s.,،؛؟!:\-–—«»""''…(){}\[\]/ـ]+$')
     return bool(arabic_pattern.match(text))
 
 def split_text_into_chunks(text, window_size):
@@ -143,7 +143,8 @@ def train_model(model, train_dataloader, val_dataloader, device, num_epochs=3, l
         model.train()
         epoch_loss = 0
         
-        for batch in tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{num_epochs} Training", leave=False):
+        progress_bar = tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{num_epochs} Training", leave=False)
+        for batch in progress_bar:
             optimizer.zero_grad()
             batch = {k: v.to(device) for k, v in batch.items()}
             if scaler is not None:
@@ -159,7 +160,8 @@ def train_model(model, train_dataloader, val_dataloader, device, num_epochs=3, l
                 loss.backward()
                 optimizer.step()
             epoch_loss += loss.item()
-            logging.info(f"Training Epoch {epoch+1} Batch Loss = {loss.item():.4f}")
+            progress_bar.set_postfix({'batch_loss': f'{loss.item():.4f}'})
+            logging.debug(f"Training Epoch {epoch+1} Batch Loss = {loss.item():.4f}")  # Only log at debug level
             
         avg_train_loss = epoch_loss / len(train_dataloader)
         logging.info(f"Epoch {epoch+1}/{num_epochs} - Average Train Loss: {avg_train_loss:.4f}")
@@ -311,122 +313,48 @@ def process_dataset(dataset: Dataset, window_size: int, base_dir: str):
     print("Dataset segmentation and splitting complete.")
     print("Files saved: train.txt, test.txt, validation.txt")
 
-def load_sentiment_dataset(file_path, tokenizer, arrow_table, num_labels, max_length=512, dataset_type="default"):
+def load_sentiment_dataset(file_path, tokenizer, max_length=512):
     """
-    Load and tokenize a sentiment dataset from a text file.
-
-    Reads a tab-separated file where each line contains an id, text, and label.
-    Converts labels based on dataset type and tokenizes the text using the provided tokenizer.
-
-    Args:
-        file_path (str): Path to the sentiment dataset file.
-        tokenizer: Tokenizer to process the text.
-        arrow_table: (Unused) Placeholder for future use.
-        num_labels (int): Number of label classes.
-        max_length (int, optional): Maximum tokenized sequence length. Defaults to 512.
-        dataset_type (str, optional): Type of dataset (e.g., "default", "ajgt", "labr", "astd"). Defaults to "default".
-
-    Returns:
-        list: A list of tokenized samples with associated labels.
-    """
-    samples = []
-    ratings = []
+    Load and tokenize a sentiment dataset from a preprocessed text file.
     
-    def is_numeric(s):
-        try:
-            float(s)
-            return True
-        except Exception:
-            return False
-
-    with open(file_path, "r", encoding="utf-8") as f:
-        for line in f:
-            parts = line.strip().split("\t", maxsplit=2)
-            if len(parts) != 3:
-                logging.warning(f"Line skipped due to insufficient parts: {line.strip()}")
-                continue
-            _, text, label = parts
-            if text is None or not isinstance(text, str) or text.strip() == "":
-                continue
-            label = label.strip().replace("|", "").strip()
-            if label == "":
-                continue
-
-            if dataset_type.lower() == "ajgt":
-                if is_numeric(label):
-                    rating = int(float(label))
-                else:
-                    mapping = {"positive": 1, "negative": 0, "pos": 1, "neg": 0}
-                    key = label.lower()
-                    if key in mapping:
-                        rating = mapping[key]
-                    else:
-                        logging.warning(f"Could not convert AJGT label for sample: {line.strip()}")
-                        continue
-                sentiment = rating  
-            elif dataset_type.lower() == "labr":
-                if is_numeric(label):
-                    rating = int(float(label))
-                else:
-                    mapping = {"OBJ": 0, "NEG": 1, "POS": 1, "MIX": 1}
-                    key = label.upper()
-                    if key in mapping:
-                        rating = mapping[key]
-                    else:
-                        logging.warning(f"Could not convert LABR label for sample: {line.strip()} | Error: {label}")
-                        continue
-                if rating == 3:
-                    continue 
-                sentiment = 0 if rating < 3 else 1
-            elif dataset_type.lower() == "astd":
-                mapping = {"obj": 0, "pos": 1, "neg": 2, "neu": 3, "neutral": 3}
-                key = label.lower()
-                if key in mapping:
-                    sentiment = mapping[key]
-                else:
-                    logging.warning(f"Could not convert ASTD label for sample: {line.strip()}")
-                    continue
-            else:
-                if is_numeric(label):
-                    rating = int(float(label))
-                else:
-                    mapping = {"OBJ": 0, "NEUTRAL": 0, "NEG": 1, "POS": 1, "MIX": 1}
-                    key = label.upper()
-                    if key in mapping:
-                        rating = mapping[key]
-                    else:
-                        logging.warning(f"Could not convert label for sample: {line.strip()}")
-                        continue
-                sentiment = 0 if rating <= 1 else 1
-
-            if 0 <= sentiment < num_labels:
-                samples.append((text, sentiment))
-                ratings.append(sentiment)
-            else:
-                logging.warning(f"Invalid sentiment {sentiment} for text: {text[:30]}...")
-
-    if ratings:
-        logging.info(f"Loaded {len(samples)} samples from {file_path}. Label range: min={min(ratings)}, max={max(ratings)}")
-    else:
-        logging.warning(f"No valid samples loaded from {file_path}.")
-
-    tokenized_samples = []
-    for text, label in samples:
-        if isinstance(text, list):
-            text = " ".join(text)
-        encoding = tokenizer(
-            text,
+    Args:
+        file_path (str): Path to the preprocessed dataset file.
+        tokenizer: Tokenizer to process the text.
+        max_length (int, optional): Maximum tokenized sequence length.
+    
+    Returns:
+        datasets.Dataset: A tokenized dataset ready for training, or None if file_path is None
+    """
+    if file_path is None:
+        return None
+        
+    # Load the dataset using Hugging Face's datasets
+    dataset = load_dataset(
+        'text',
+        data_files={'data': file_path},
+        delimiter='\t',
+        column_names=['id', 'text', 'label']
+    )['data']
+    
+    def tokenize_function(examples):
+        return tokenizer(
+            examples["text"],
             padding="max_length",
             truncation=True,
             max_length=max_length,
-            return_tensors="pt",
+            return_tensors=None,  # Don't convert to tensors yet - DataLoader will handle this
             return_token_type_ids=False
         )
-        item = {key: val.squeeze(0) for key, val in encoding.items()}
-        item["labels"] = torch.tensor(label, dtype=torch.long).squeeze()
-        tokenized_samples.append(item)
-
-    return tokenized_samples
+    
+    # Tokenize the dataset and set the format to PyTorch
+    tokenized_dataset = dataset.map(
+        tokenize_function,
+        batched=True,
+        remove_columns=['id', 'text']  # Remove columns we don't need for training
+    )
+    tokenized_dataset = tokenized_dataset.with_format("torch")
+    
+    return tokenized_dataset
 
 def prepare_astd_benchmark(data_dir, astd_info):
     """
@@ -521,6 +449,156 @@ def prepare_labr_benchmark(data_dir, labr_info):
     print(f"Train file: {train_path} (rows: {len(train_df)})")
     print(f"Test file: {test_path} (rows: {len(test_df)})")
 
+# Generate a unique log filename based on model, epochs, patience, and timestamp
+def get_log_filename(model_name, epochs, patience, dataset_name):
+    """
+    Generate a unique log filename based on model name, epoch count, patience, dataset, and current timestamp.
+
+    Args:
+        model_name (str): The name of the model.
+        epochs (int): Number of epochs.
+        patience (int): Early stopping patience value.
+        dataset_name (str): The selected dataset name.
+
+    Returns:
+        str: The generated log filename.
+    """
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return f"SA_Benchmark_{model_name}_{dataset_name}_{epochs}ep_p{patience}_{timestamp}.log"
+
+datasets_dict = {
+    "hard": {
+        "name": "Elnagara/hard",
+        "num_labels": 2,
+        "load_type": "hf",
+        "token": HF_TOKEN
+    },
+    "astd": {
+        "name": "ASTD",
+        "num_labels": 2,
+        "load_type": "csv",
+        "url": "https://raw.githubusercontent.com/mahmoudnabil/ASTD/master/data/Tweets.txt?raw=true",
+        "benchmark_train": "https://raw.githubusercontent.com/mahmoudnabil/ASTD/master/data/4class-balanced-train.txt?raw=true",
+        "benchmark_test": "https://raw.githubusercontent.com/mahmoudnabil/ASTD/master/data/4class-balanced-test.txt?raw=true",
+        "benchmark_validation": "https://raw.githubusercontent.com/mahmoudnabil/ASTD/master/data/4class-balanced-validation.txt?raw=true",
+        "column_names": ["text", "label"]
+    },
+    "labr": {
+        "name": "LABR",
+        "num_labels": 2,
+        "load_type": "csv",
+        "url": "https://raw.githubusercontent.com/mohamedadaly/LABR/master/data/reviews.tsv?raw=true",
+        "benchmark_train": "https://raw.githubusercontent.com/mohamedadaly/LABR/master/data/2class-unbalanced-train.txt?raw=true",
+        "benchmark_test": "https://raw.githubusercontent.com/mohamedadaly/LABR/master/data/2class-unbalanced-test.txt?raw=true",
+        "column_names": ["rating", "review id", "user_id", "book_id", "review"]
+    },
+    "ajgt": {
+        "name": "AJGT",
+        "num_labels": 2,
+        "load_type": "xlsx",
+        "url": "https://github.com/komari6/Arabic-twitter-corpus-AJGT/blob/master/AJGT.xlsx?raw=true",
+        "column_names": ["text", "label"]
+    }
+}
+
+models = {
+    "modernbert": "./model_checkpoints/checkpoint_step_13000/",
+    "arabert": "aubmindlab/bert-base-arabert"
+}
+
+def create_dataloader(dataset, batch_size, num_workers, shuffle=False):
+    """
+    Create a DataLoader with standard configuration.
+    
+    Args:
+        dataset: The dataset to load
+        batch_size (int): Batch size
+        num_workers (int): Number of worker threads
+        shuffle (bool, optional): Whether to shuffle the data. Defaults to False.
+    
+    Returns:
+        DataLoader: Configured DataLoader
+    """
+    return DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        num_workers=num_workers,
+        pin_memory=True
+    )
+
+def prepare_dataset(dataset_name, data_dir, dataset_info, preprocess_flag=False, use_streaming=False):
+    """
+    Prepare dataset files if they don't exist.
+    
+    Args:
+        dataset_name (str): Name of the dataset
+        data_dir (str): Directory to store dataset files
+        dataset_info (dict): Dataset configuration
+        preprocess_flag (bool): Whether to skip preprocessing
+        use_streaming (bool): Whether to use streaming mode
+    """
+    files_to_check = [
+        os.path.join(data_dir, "train.txt"),
+        os.path.join(data_dir, "test.txt")
+    ]
+    if dataset_name != "labr":
+        files_to_check.append(os.path.join(data_dir, "validation.txt"))
+        
+    if all(os.path.exists(f) for f in files_to_check):
+        return
+
+    if use_streaming:
+        print("Streaming mode enabled. Skipping in-memory processing and splitting.")
+        return
+
+    if dataset_name == "hard":
+        dataset = load_dataset("Elnagara/hard", "plain_text", split="train", token=HF_TOKEN)
+        if not preprocess_flag:
+            process_dataset(dataset, window_size=8192, base_dir=data_dir)
+    elif dataset_name == "astd":
+        prepare_astd_benchmark(data_dir, dataset_info)
+    elif dataset_name == "labr":
+        prepare_labr_benchmark(data_dir, dataset_info)
+    elif dataset_name == "ajgt":
+        df = pd.read_excel(dataset_info["url"], engine="openpyxl")
+        df = df.iloc[:, 1:3] if len(df.columns) == 3 else df.iloc[:, :2]
+        df.columns = dataset_info["column_names"]
+        dataset = Dataset.from_pandas(df)
+        if not preprocess_flag:
+            process_dataset(dataset, window_size=8192, base_dir=data_dir)
+
+def configure_model(model_name, model_path, num_labels, device, freeze=False):
+    """
+    Configure the model with the specified settings.
+    
+    Args:
+        model_name (str): Name of the model
+        model_path (str): Path to model files
+        num_labels (int): Number of output labels
+        device: The device to put the model on
+        freeze (bool): Whether to freeze model parameters
+    
+    Returns:
+        tuple: (model, tokenizer)
+    """
+    tokenizer_path = model_path if model_name == "arabert" else MODERN_BERT_TOKENIZER_PATH
+    
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, token=HF_TOKEN)
+    model = AutoModelForSequenceClassification.from_pretrained(model_path, token=HF_TOKEN)
+    
+    config = AutoConfig.from_pretrained(model_path, num_labels=num_labels, token=HF_TOKEN)
+    model.classifier = nn.Linear(model.config.hidden_size, num_labels)
+    
+    if freeze:
+        for name, param in model.named_parameters():
+            if "classifier" not in name:
+                param.requires_grad = False
+                
+    model.to(device)
+    return model, tokenizer
+
+
 # Main Benchmarking Script 
 
 HF_TOKEN = "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"
@@ -576,23 +654,6 @@ parser.add_argument("--patience", dest="patience", type=int, default=5,
                     help="Early stopping patience value")
 args = parser.parse_args()
 
-# Generate a unique log filename based on model, epochs, patience, and timestamp
-def get_log_filename(model_name, epochs, patience, dataset_name):
-    """
-    Generate a unique log filename based on model name, epoch count, patience, dataset, and current timestamp.
-
-    Args:
-        model_name (str): The name of the model.
-        epochs (int): Number of epochs.
-        patience (int): Early stopping patience value.
-        dataset_name (str): The selected dataset name.
-
-    Returns:
-        str: The generated log filename.
-    """
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return f"SA_Benchmark_{model_name}_{dataset_name}_{epochs}ep_p{patience}_{timestamp}.log"
-
 # Set patience value 
 PATIENCE = args.patience
 LOG_DIR = "./logs"
@@ -616,62 +677,16 @@ PARENT_PATH = "./data"
 
 MODERN_BERT_TOKENIZER_PATH = "./Tokenizer"
 
-if args.dataset_name.lower() == "hard":
-    DATA_DIR = f"{PARENT_PATH}/hard"
-elif args.dataset_name.lower() in ["astd", "labr", "ajgt"]:
-    DATA_DIR = f"{PARENT_PATH}/{args.dataset_name.lower()}"
-else:
-    DATA_DIR = f"{PARENT_PATH}/{args.dataset_name.lower()}"
+DATA_DIR = f"{PARENT_PATH}/{args.dataset_name.lower()}"
 
 if args.dataset_name.lower() == "labr":
     TRAIN_FILE = os.path.join(DATA_DIR, "train.txt")
+    VAL_FILE = None
     TEST_FILE = os.path.join(DATA_DIR, "test.txt")
-    EVAL_FILE = TEST_FILE
 else:
     TRAIN_FILE = os.path.join(DATA_DIR, "train.txt")
     VAL_FILE = os.path.join(DATA_DIR, "validation.txt")
     TEST_FILE = os.path.join(DATA_DIR, "test.txt")
-    EVAL_FILE = TEST_FILE if args.benchmark else VAL_FILE
-
-datasets_dict = {
-    "hard": {
-        "name": "Elnagara/hard",
-        "num_labels": 2,
-        "load_type": "hf",
-        "token": HF_TOKEN
-    },
-    "astd": {
-        "name": "ASTD",
-        "num_labels": 2,
-        "load_type": "csv",
-        "url": "https://raw.githubusercontent.com/mahmoudnabil/ASTD/master/data/Tweets.txt?raw=true",
-        "benchmark_train": "https://raw.githubusercontent.com/mahmoudnabil/ASTD/master/data/4class-balanced-train.txt?raw=true",
-        "benchmark_test": "https://raw.githubusercontent.com/mahmoudnabil/ASTD/master/data/4class-balanced-test.txt?raw=true",
-        "benchmark_validation": "https://raw.githubusercontent.com/mahmoudnabil/ASTD/master/data/4class-balanced-validation.txt?raw=true",
-        "column_names": ["text", "label"]
-    },
-    "labr": {
-        "name": "LABR",
-        "num_labels": 2,
-        "load_type": "csv",
-        "url": "https://raw.githubusercontent.com/mohamedadaly/LABR/master/data/reviews.tsv?raw=true",
-        "benchmark_train": "https://raw.githubusercontent.com/mohamedadaly/LABR/master/data/2class-unbalanced-train.txt?raw=true",
-        "benchmark_test": "https://raw.githubusercontent.com/mohamedadaly/LABR/master/data/2class-unbalanced-test.txt?raw=true",
-        "column_names": ["rating", "review id", "user_id", "book_id", "review"]
-    },
-    "ajgt": {
-        "name": "AJGT",
-        "num_labels": 2,
-        "load_type": "xlsx",
-        "url": "https://github.com/komari6/Arabic-twitter-corpus-AJGT/blob/master/AJGT.xlsx?raw=true",
-        "column_names": ["text", "label"]
-    }
-}
-
-models = {
-    "modernbert": "./model_checkpoints/checkpoint_step_13000/",
-    "arabert": "aubmindlab/bert-base-arabert"
-}
 
 seed = 42
 random.seed(seed)
@@ -680,55 +695,10 @@ torch.manual_seed(seed)
 if torch.cuda.is_available():
     torch.cuda.manual_seed_all(seed)
 
+
 if __name__ == '__main__':
     chosen_dataset = args.dataset_name.lower()
-    if chosen_dataset == "hard":
-        DATA_DIR = f"{PARENT_PATH}/hard"
-        dataset = load_dataset("Elnagara/hard", "plain_text",
-                               split="train", token=HF_TOKEN)
-        TRAIN_FILE = os.path.join(DATA_DIR, "train.txt")
-        VAL_FILE = os.path.join(DATA_DIR, "validation.txt")
-        TEST_FILE = os.path.join(DATA_DIR, "test.txt")
-        if not (os.path.exists(TRAIN_FILE) and os.path.exists(VAL_FILE) and os.path.exists(TEST_FILE)):
-            process_dataset(dataset, window_size=8192, base_dir=DATA_DIR)
-    elif chosen_dataset == "astd":
-        DATA_DIR = f"{PARENT_PATH}/astd"
-        TRAIN_FILE = os.path.join(DATA_DIR, "train.txt")
-        VAL_FILE = os.path.join(DATA_DIR, "validation.txt")
-        TEST_FILE = os.path.join(DATA_DIR, "test.txt")
-        if not (os.path.exists(TRAIN_FILE) and os.path.exists(VAL_FILE) and os.path.exists(TEST_FILE)):
-            prepare_astd_benchmark(DATA_DIR, datasets_dict["astd"])
-        dataset = None
-    elif chosen_dataset == "labr":
-        DATA_DIR = f"{PARENT_PATH}/labr"
-        prepare_labr_benchmark(DATA_DIR, datasets_dict["labr"])
-        TRAIN_FILE = os.path.join(DATA_DIR, "train.txt")
-        TEST_FILE = os.path.join(DATA_DIR, "test.txt")
-        EVAL_FILE = TEST_FILE
-        dataset = None
-    elif chosen_dataset == "ajgt":
-        DATA_DIR = f"{PARENT_PATH}/ajgt"
-        df = pd.read_excel(datasets_dict["ajgt"]["url"], engine="openpyxl")
-        if len(df.columns) == 3:
-            df = df.iloc[:, 1:3]
-        else:
-            df = df.iloc[:, :2]
-        df.columns = datasets_dict["ajgt"]["column_names"]
-        ds = Dataset.from_pandas(df)
-        TRAIN_FILE = os.path.join(DATA_DIR, "train.txt")
-        VAL_FILE = os.path.join(DATA_DIR, "validation.txt")
-        TEST_FILE = os.path.join(DATA_DIR, "test.txt")
-        if not (os.path.exists(TRAIN_FILE) and os.path.exists(VAL_FILE) and os.path.exists(TEST_FILE)):
-            process_dataset(ds, window_size=8192, base_dir=DATA_DIR)
-        dataset = ds
-    else:
-        raise ValueError("Unknown dataset selected.")
-
-    if chosen_dataset not in ["astd", "labr"] and not args.use_streaming:
-        if not args.preprocess_flag:
-            process_dataset(dataset, window_size=8192, base_dir=DATA_DIR)
-    elif args.use_streaming:
-        print("Streaming mode enabled. Skipping in-memory processing and splitting.")
+    prepare_dataset(chosen_dataset, DATA_DIR, datasets_dict[chosen_dataset], args.preprocess_flag, args.use_streaming)
 
     EVAL_FILE = TEST_FILE if args.benchmark else (
         VAL_FILE if chosen_dataset != "labr" else TEST_FILE)
@@ -760,78 +730,44 @@ if __name__ == '__main__':
         logging.info(f"Benchmarking model: {model_name}")
         print(f"\nBenchmarking model: {model_name}")
 
-        tokenizer_path = model_path if model_name == "arabert" else MODERN_BERT_TOKENIZER_PATH
+        model, tokenizer = configure_model(
+            model_name,
+            model_path,
+            datasets_dict[args.dataset_name]['num_labels'],
+            device,
+            args.freeze
+        )
 
-        tokenizer = AutoTokenizer.from_pretrained(
-            tokenizer_path, token=HF_TOKEN)
-        model = AutoModelForSequenceClassification.from_pretrained(
-            model_path, token=HF_TOKEN)
-
-        config = AutoConfig.from_pretrained(
-            model_path, num_labels=datasets_dict[args.dataset_name]['num_labels'], token=HF_TOKEN)
-        hidden_size = model.config.hidden_size
-        model.classifier = nn.Linear(
-            hidden_size, datasets_dict[args.dataset_name]['num_labels'])
-
-        if args.freeze:
-            for name, param in model.named_parameters():
-                if "classifier" not in name:
-                    param.requires_grad = False
-
-        model.to(device)
-
-        extra_kwargs = {}
-        if args.dataset_name.lower() == "labr":
-            extra_kwargs["dataset_type"] = "labr"
-        elif args.dataset_name.lower() == "ajgt":
-            extra_kwargs["dataset_type"] = "ajgt"
-        else:
-            extra_kwargs["dataset_type"] = "default"
-
-        train_samples = load_sentiment_dataset(
+        train_dataset = load_sentiment_dataset(
             TRAIN_FILE,
             tokenizer,
-            None,
-            num_labels=datasets_dict[args.dataset_name]['num_labels'],
-            max_length=args.max_size,
-            dataset_type=extra_kwargs.get("dataset_type", "default")
+            max_length=args.max_size
         )
-        if len(train_samples) == 0:
-            logging.error(
-                f"No training samples loaded for model {model_name}.")
+        if len(train_dataset) == 0:
+            logging.error(f"No training samples loaded for model {model_name}.")
             raise Exception("No training samples.")
-        train_dataloader = DataLoader(
-            train_samples,
-            batch_size=args.batch_size,
-            shuffle=True,
-            num_workers=args.num_workers,
-            pin_memory=True
-        )
 
-        val_samples = load_sentiment_dataset(
-            EVAL_FILE,
-            tokenizer,
-            None,
-            num_labels=datasets_dict[args.dataset_name]['num_labels'],
-            max_length=args.max_size,
-            dataset_type=extra_kwargs.get("dataset_type", "default")
-        )
-        if len(val_samples) == 0:
-            if args.dataset_name.lower() == "labr":
-                logging.warning(
-                    "No validation samples loaded for LABR dataset; using training samples as validation.")
-                val_samples = train_samples
-            else:
-                logging.error(
-                    f"No validation samples loaded for model {model_name}.")
+
+        # Handle validation dataset
+        if VAL_FILE is None:
+            logging.info("No validation file specified, using a portion of training data for validation")
+            # Split training dataset into train and validation
+            train_val_split = train_dataset.train_test_split(test_size=0.2, seed=42)
+            val_dataset = train_val_split['test']
+            # Update train_dataset to be smaller
+            train_dataset = train_val_split['train']
+        else:
+            val_dataset = load_sentiment_dataset(
+                VAL_FILE,
+                tokenizer,
+                max_length=args.max_size
+            )
+            if len(val_dataset) == 0:
+                logging.error(f"No validation samples loaded for model {model_name}.")
                 raise Exception("No validation samples.")
-        val_dataloader = DataLoader(
-            val_samples,
-            batch_size=args.batch_size,
-            shuffle=False,
-            num_workers=args.num_workers,
-            pin_memory=True
-        )
+
+        train_dataloader = create_dataloader(train_dataset, args.batch_size, args.num_workers, shuffle=True)
+        val_dataloader = create_dataloader(val_dataset, args.batch_size, args.num_workers, shuffle=False)
 
         logging.info(f"Starting training for model: {model_name}")
         model_trained = train_model(
@@ -847,8 +783,16 @@ if __name__ == '__main__':
             save_every=args.save_every
         )
 
+        test_dataset = load_sentiment_dataset(
+            TEST_FILE,
+            tokenizer,
+            max_length=args.max_size
+        )
+        
+        test_dataloader = create_dataloader(test_dataset, args.batch_size, args.num_workers, shuffle=False)
+
         accuracy, report, preds, true_labels, confidences, avg_eval_loss, perplexity = evaluate_model(
-            model_trained, val_dataloader, device)
+            model_trained, test_dataloader, device)
         benchmark_results[model_name] = {
             "accuracy": accuracy,
             "report": report,
