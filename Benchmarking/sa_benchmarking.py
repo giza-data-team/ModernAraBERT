@@ -255,17 +255,18 @@ def evaluate_model(model, eval_dataloader, device):
 
 # Dataset and Text Preprocessing routines 
 
-def process_dataset(dataset: Dataset, window_size: int, base_dir: str):
+def process_dataset(dataset: Dataset, window_size: int, base_dir: str, dataset_type: str = "hard"):
     """
     Process and segment texts from a dataset, then split them into train, test, and validation sets.
 
     This function extracts the text, applies segmentation and filtering (only if the text contains valid Arabic),
-    and saves the processed chunks into separate TXT files for each split.
+    converts labels to numeric format, and saves the processed chunks into separate TXT files for each split.
 
     Args:
         dataset (Dataset): Hugging Face Dataset containing examples with a "text" field.
         window_size (int): Maximum number of words per text chunk.
         base_dir (str): Directory where the split files will be saved.
+        dataset_type (str): Type of dataset ('hard', 'astd', 'labr', 'ajgt')
     """
     print("Processing and segmenting texts...")
     processed_texts = []
@@ -278,6 +279,12 @@ def process_dataset(dataset: Dataset, window_size: int, base_dir: str):
             continue 
         doc_id = example.get("id", None)
         label = example.get("label", None)
+        
+        # Convert label to numeric format
+        label = convert_label(label, dataset_type)
+        if label is None:
+            continue
+            
         if is_arabic_text(text):
             chunks = process_text(text, window_size)
             for chunk in chunks:
@@ -313,6 +320,55 @@ def process_dataset(dataset: Dataset, window_size: int, base_dir: str):
     print("Dataset segmentation and splitting complete.")
     print("Files saved: train.txt, test.txt, validation.txt")
 
+def convert_label(label_str, dataset_type):
+    """
+    Convert string labels to numeric labels based on dataset type.
+    
+    Args:
+        label_str (str): String representation of the label
+        dataset_type (str): Type of dataset ('hard', 'astd', 'labr', 'ajgt')
+        
+    Returns:
+        int or None: Converted numeric label, or None if conversion fails
+    """
+    def is_numeric(s):
+        try:
+            float(s)
+            return True
+        except Exception:
+            return False
+
+    label_str = str(label_str).strip().replace("|", "").strip()
+    if label_str == "":
+        return None
+
+    if dataset_type.lower() == "ajgt":
+        if is_numeric(label_str):
+            rating = int(float(label_str))
+            return rating
+        mapping = {"positive": 1, "negative": 0, "pos": 1, "neg": 0}
+        return mapping.get(label_str.lower())
+
+    elif dataset_type.lower() == "labr":
+        if is_numeric(label_str):
+            rating = int(float(label_str))
+            if rating == 3:
+                return None
+            return 0 if rating < 3 else 1
+        mapping = {"OBJ": 0, "NEG": 0, "POS": 1, "MIX": 1}
+        return mapping.get(label_str.upper())
+
+    elif dataset_type.lower() == "astd":
+        mapping = {"obj": 0, "pos": 1, "neg": 2, "neu": 3, "neutral": 3}
+        return mapping.get(label_str.lower())
+
+    else:  # default/hard dataset
+        if is_numeric(label_str):
+            rating = int(float(label_str))
+            return 0 if rating <= 1 else 1
+        mapping = {"OBJ": 0, "NEUTRAL": 0, "NEG": 1, "POS": 1, "MIX": 1}
+        return mapping.get(label_str.upper())
+
 def load_sentiment_dataset(file_path, tokenizer, max_length=512, dataset_type="hard"):
     """
     Load and tokenize a sentiment dataset from a preprocessed text file.
@@ -329,46 +385,6 @@ def load_sentiment_dataset(file_path, tokenizer, max_length=512, dataset_type="h
     if file_path is None:
         return None
 
-    def convert_label(label_str, dataset_type):
-        """Helper function to convert labels based on dataset type."""
-        def is_numeric(s):
-            try:
-                float(s)
-                return True
-            except Exception:
-                return False
-
-        label_str = label_str.strip().replace("|", "").strip()
-        if label_str == "":
-            return None
-
-        if dataset_type.lower() == "ajgt":
-            if is_numeric(label_str):
-                rating = int(float(label_str))
-                return rating
-            mapping = {"positive": 1, "negative": 0, "pos": 1, "neg": 0}
-            return mapping.get(label_str.lower())
-
-        elif dataset_type.lower() == "labr":
-            if is_numeric(label_str):
-                rating = int(float(label_str))
-                if rating == 3:
-                    return None
-                return 0 if rating < 3 else 1
-            mapping = {"OBJ": 0, "NEG": 0, "POS": 1, "MIX": 1}
-            return mapping.get(label_str.upper())
-
-        elif dataset_type.lower() == "astd":
-            mapping = {"obj": 0, "pos": 1, "neg": 2, "neu": 3, "neutral": 3}
-            return mapping.get(label_str.lower())
-
-        else:  # default/hard dataset
-            if is_numeric(label_str):
-                rating = int(float(label_str))
-                return 0 if rating <= 1 else 1
-            mapping = {"OBJ": 0, "NEUTRAL": 0, "NEG": 1, "POS": 1, "MIX": 1}
-            return mapping.get(label_str.upper())
-
     # Load the dataset using Hugging Face's datasets
     dataset = load_dataset(
         'text',
@@ -377,21 +393,8 @@ def load_sentiment_dataset(file_path, tokenizer, max_length=512, dataset_type="h
         column_names=['id', 'text', 'label']
     )['data']
 
-    # Convert labels based on dataset type
-    def process_example(example):
-        converted_label = convert_label(str(example['label']), dataset_type)
-        if converted_label is None:
-            return None
-        example['label'] = converted_label
-        return example
-
-    # Filter and process examples
-    dataset = dataset.map(
-        process_example,
-        remove_columns=dataset.column_names,
-        load_from_cache_file=False
-    )
-    dataset = dataset.filter(lambda x: x is not None)
+    # Filter examples with invalid labels
+    dataset = dataset.filter(lambda x: x['label'] is not None and str(x['label']).strip() != "")
 
     def tokenize_function(examples):
         return tokenizer(
@@ -440,6 +443,14 @@ def prepare_astd_benchmark(data_dir, astd_info):
         quoting=csv.QUOTE_NONE
     )
     main_df["id"] = main_df.index.astype(str)
+    
+    # Convert labels before saving
+    main_df["label"] = main_df["label"].apply(lambda x: convert_label(x, "astd"))
+    # Filter out rows with None labels
+    main_df = main_df.dropna(subset=["label"])
+    # Ensure label is integer
+    main_df["label"] = main_df["label"].astype(int)
+    
     main_df = main_df[["id", "text", "label"]]
     
     train_ids = pd.read_csv(astd_info["benchmark_train"], header=None, names=["id"], dtype=str)
@@ -479,10 +490,10 @@ def prepare_labr_benchmark(data_dir, labr_info):
         engine="python"
     )
     
-    main_df["rating"] = pd.to_numeric(main_df["rating"], errors="coerce")
+    # Convert labels using the convert_label function
+    main_df["rating"] = main_df["rating"].apply(lambda x: convert_label(x, "labr"))
     main_df = main_df.dropna(subset=["rating"])
-    main_df = main_df[main_df["rating"] != 3]
-    main_df["label"] = main_df["rating"].apply(lambda x: 1 if x >= 4 else 0)
+    main_df["label"] = main_df["rating"].astype(int)
     
     main_df = main_df.reset_index()  
     main_df["id"] = main_df["index"].astype(int).astype(str)
@@ -592,33 +603,54 @@ def create_dataloader(dataset, batch_size, num_workers, shuffle=False):
 
 def prepare_dataset(dataset_name, data_dir, dataset_info, preprocess_flag=False, use_streaming=False):
     """
-    Prepare dataset files if they don't exist.
+    Prepare dataset files if they don't exist and preprocess_flag is True.
+    If preprocess_flag is False, only load from local storage and throw error if files don't exist.
     
     Args:
         dataset_name (str): Name of the dataset
         data_dir (str): Directory to store dataset files
         dataset_info (dict): Dataset configuration
-        preprocess_flag (bool): Whether to skip preprocessing
+        preprocess_flag (bool): Whether to prepare datasets (True) or only load from local (False)
         use_streaming (bool): Whether to use streaming mode
+        
+    Raises:
+        FileNotFoundError: If preprocess_flag is False and dataset files don't exist
     """
+    os.makedirs(data_dir, exist_ok=True)
+    
     files_to_check = [
         os.path.join(data_dir, "train.txt"),
         os.path.join(data_dir, "test.txt")
     ]
     if dataset_name != "labr":
         files_to_check.append(os.path.join(data_dir, "validation.txt"))
-        
-    if all(os.path.exists(f) for f in files_to_check):
+    
+    all_files_exist = all(os.path.exists(f) for f in files_to_check)
+    
+    # If all files exist, no need for preparation
+    if all_files_exist:
+        print(f"Dataset {dataset_name} files found in {data_dir}")
         return
-
+    
+    # If files don't exist and preprocess_flag is False, raise error
+    if not preprocess_flag:
+        missing_files = [f for f in files_to_check if not os.path.exists(f)]
+        raise FileNotFoundError(
+            f"Dataset {dataset_name} files not found in {data_dir}. "
+            f"Missing files: {', '.join([os.path.basename(f) for f in missing_files])}. "
+            "Please run with --preprocess-flag to prepare the dataset."
+        )
+    
+    # Only proceed with preparation if preprocess_flag is True
+    print(f"Preparing {dataset_name} dataset...")
+    
     if use_streaming:
         print("Streaming mode enabled. Skipping in-memory processing and splitting.")
         return
 
     if dataset_name == "hard":
         dataset = load_dataset("Elnagara/hard", "plain_text", split="train", token=HF_TOKEN)
-        if not preprocess_flag:
-            process_dataset(dataset, window_size=8192, base_dir=data_dir)
+        process_dataset(dataset, window_size=8192, base_dir=data_dir, dataset_type=dataset_name)
     elif dataset_name == "astd":
         prepare_astd_benchmark(data_dir, dataset_info)
     elif dataset_name == "labr":
@@ -628,8 +660,7 @@ def prepare_dataset(dataset_name, data_dir, dataset_info, preprocess_flag=False,
         df = df.iloc[:, 1:3] if len(df.columns) == 3 else df.iloc[:, :2]
         df.columns = dataset_info["column_names"]
         dataset = Dataset.from_pandas(df)
-        if not preprocess_flag:
-            process_dataset(dataset, window_size=8192, base_dir=data_dir)
+        process_dataset(dataset, window_size=8192, base_dir=data_dir, dataset_type=dataset_name)
 
 def configure_model(model_name, model_path, num_labels, device, freeze=False):
     """
@@ -682,7 +713,7 @@ Arguments:
 - --continue-from-checkpoint: Resume training from a saved checkpoint.
 - --preprocess-flag: Skip preprocessing if already done.
 - --save-every: Save checkpoint every N epochs.
-- --use-streaming: Use streaming dataset loading (no in-memory splitting).
+- --use-streaming: Use streaming mode for dataset (splitting not supported in streaming mode).
 - --patience: Patience for early stopping if validation loss doesn't improve.
 """
 
@@ -708,7 +739,7 @@ parser.add_argument("--checkpoint", dest="checkpoint", type=str, default=None,
 parser.add_argument("--continue-from-checkpoint", dest="continue_from_checkpoint", action='store_true',
                     help="Flag to load from a saved checkpoint and continue training")
 parser.add_argument("--preprocess-flag", dest="preprocess_flag", action='store_true',
-                    help="If True, skip dataset preprocessing (assumes preprocessing is already done)")
+                    help="If True, preprocess and prepare datasets. If False, only load from local storage.")
 parser.add_argument("--save-every", dest="save_every", type=int, default=None,
                     help="Save checkpoint every N epochs (if provided)")
 parser.add_argument("--use-streaming", dest="use_streaming", action='store_true',
@@ -761,168 +792,176 @@ if torch.cuda.is_available():
 
 if __name__ == '__main__':
     chosen_dataset = args.dataset_name.lower()
-    prepare_dataset(chosen_dataset, DATA_DIR, datasets_dict[chosen_dataset], args.preprocess_flag, args.use_streaming)
+    try:
+        prepare_dataset(chosen_dataset, DATA_DIR, datasets_dict[chosen_dataset], args.preprocess_flag, args.use_streaming)
 
-    EVAL_FILE = TEST_FILE if args.benchmark else (
-        VAL_FILE if chosen_dataset != "labr" else TEST_FILE)
+        EVAL_FILE = TEST_FILE if args.benchmark else (
+            VAL_FILE if chosen_dataset != "labr" else TEST_FILE)
 
-    def main():
-        """
-        Main function for running sentiment analysis benchmarking.
+        def main():
+            """
+            Main function for running sentiment analysis benchmarking.
 
-        Loads model and tokenizer, processes datasets, trains the model, evaluates its performance,
-        and saves both the final model and the benchmarking results.
+            Loads model and tokenizer, processes datasets, trains the model, evaluates its performance,
+            and saves both the final model and the benchmarking results.
 
-        This function orchestrates the complete workflow:
-            - Device selection and logging.
-            - Loading data and preparing dataloaders.
-            - Training the model with early stopping and checkpointing.
-            - Evaluating model performance and saving results.
-        """
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        logging.info(f"Using device: {device}")
-        print(f"Using device: {device}")
+            This function orchestrates the complete workflow:
+                - Device selection and logging.
+                - Loading data and preparing dataloaders.
+                - Training the model with early stopping and checkpointing.
+                - Evaluating model performance and saving results.
+            """
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            logging.info(f"Using device: {device}")
+            print(f"Using device: {device}")
 
-        benchmark_results = {}
-        model_predictions = {}
-        model_confidences = {}
-        model_true_labels = None
+            benchmark_results = {}
+            model_predictions = {}
+            model_confidences = {}
+            model_true_labels = None
 
-        model_name = args.model_name
-        model_path = models.get(model_name)
-        logging.info(f"Benchmarking model: {model_name}")
-        print(f"\nBenchmarking model: {model_name}")
+            model_name = args.model_name
+            model_path = models.get(model_name)
+            logging.info(f"Benchmarking model: {model_name}")
+            print(f"\nBenchmarking model: {model_name}")
 
-        model, tokenizer = configure_model(
-            model_name,
-            model_path,
-            datasets_dict[args.dataset_name]['num_labels'],
-            device,
-            args.freeze
-        )
+            model, tokenizer = configure_model(
+                model_name,
+                model_path,
+                datasets_dict[args.dataset_name]['num_labels'],
+                device,
+                args.freeze
+            )
 
-        train_dataset = load_sentiment_dataset(
-            TRAIN_FILE,
-            tokenizer,
-            max_length=args.max_size,
-            dataset_type=args.dataset_name
-        )
-        if len(train_dataset) == 0:
-            logging.error(f"No training samples loaded for model {model_name}.")
-            raise Exception("No training samples.")
-
-
-        # Handle validation dataset
-        if VAL_FILE is None:
-            logging.info("No validation file specified, using a portion of training data for validation")
-            # Split training dataset into train and validation
-            train_val_split = train_dataset.train_test_split(test_size=0.2, seed=42)
-            val_dataset = train_val_split['test']
-            # Update train_dataset to be smaller
-            train_dataset = train_val_split['train']
-        else:
-            val_dataset = load_sentiment_dataset(
-                VAL_FILE,
+            train_dataset = load_sentiment_dataset(
+                TRAIN_FILE,
                 tokenizer,
                 max_length=args.max_size,
                 dataset_type=args.dataset_name
             )
-            if len(val_dataset) == 0:
-                logging.error(f"No validation samples loaded for model {model_name}.")
-                raise Exception("No validation samples.")
+            if len(train_dataset) == 0:
+                logging.error(f"No training samples loaded for model {model_name}.")
+                raise Exception("No training samples.")
 
-        train_dataloader = create_dataloader(train_dataset, args.batch_size, args.num_workers, shuffle=True)
-        val_dataloader = create_dataloader(val_dataset, args.batch_size, args.num_workers, shuffle=False)
 
-        logging.info(f"Starting training for model: {model_name}")
-        model_trained = train_model(
-            model,
-            train_dataloader,
-            val_dataloader,
-            device,
-            num_epochs=args.epochs,
-            learning_rate=args.learning_rate,
-            patience=PATIENCE,
-            checkpoint_path=args.checkpoint,
-            continue_from_checkpoint=args.continue_from_checkpoint,
-            save_every=args.save_every
-        )
+            # Handle validation dataset
+            if VAL_FILE is None:
+                logging.info("No validation file specified, using a portion of training data for validation")
+                # Split training dataset into train and validation
+                train_val_split = train_dataset.train_test_split(test_size=0.2, seed=42)
+                val_dataset = train_val_split['test']
+                # Update train_dataset to be smaller
+                train_dataset = train_val_split['train']
+            else:
+                val_dataset = load_sentiment_dataset(
+                    VAL_FILE,
+                    tokenizer,
+                    max_length=args.max_size,
+                    dataset_type=args.dataset_name
+                )
+                if len(val_dataset) == 0:
+                    logging.error(f"No validation samples loaded for model {model_name}.")
+                    raise Exception("No validation samples.")
 
-        test_dataset = load_sentiment_dataset(
-            TEST_FILE,
-            tokenizer,
-            max_length=args.max_size,
-            dataset_type=args.dataset_name
-        )
-        
-        test_dataloader = create_dataloader(test_dataset, args.batch_size, args.num_workers, shuffle=False)
+            train_dataloader = create_dataloader(train_dataset, args.batch_size, args.num_workers, shuffle=True)
+            val_dataloader = create_dataloader(val_dataset, args.batch_size, args.num_workers, shuffle=False)
 
-        accuracy, report, preds, true_labels, confidences, avg_eval_loss, perplexity = evaluate_model(
-            model_trained, test_dataloader, device)
-        benchmark_results[model_name] = {
-            "accuracy": accuracy,
-            "report": report,
-            "avg_eval_loss": avg_eval_loss,
-            "perplexity": perplexity
-        }
-        model_predictions[model_name] = preds
-        model_confidences[model_name] = confidences
-        if model_true_labels is None:
-            model_true_labels = true_labels
+            logging.info(f"Starting training for model: {model_name}")
+            model_trained = train_model(
+                model,
+                train_dataloader,
+                val_dataloader,
+                device,
+                num_epochs=args.epochs,
+                learning_rate=args.learning_rate,
+                patience=PATIENCE,
+                checkpoint_path=args.checkpoint,
+                continue_from_checkpoint=args.continue_from_checkpoint,
+                save_every=args.save_every
+            )
 
-        logging.info(f"{model_name} Evaluation Accuracy: {accuracy:.4f}")
-        logging.info(f"{model_name} Classification Report:\n{report}")
-        logging.info(
-            f"{model_name} Average Eval Loss: {avg_eval_loss:.4f} | Perplexity: {perplexity:.4f}")
-        print(f"{model_name} Evaluation Accuracy: {accuracy:.4f}")
-        print(f"{model_name} Classification Report:")
-        print(report)
-        print(
-            f"{model_name} Average Evaluation Loss: {avg_eval_loss:.4f} | Perplexity: {perplexity:.4f}")
+            test_dataset = load_sentiment_dataset(
+                TEST_FILE,
+                tokenizer,
+                max_length=args.max_size,
+                dataset_type=args.dataset_name
+            )
+            
+            test_dataloader = create_dataloader(test_dataset, args.batch_size, args.num_workers, shuffle=False)
 
-        print(
-            f"\nComparison of ground truth, predictions, and confidences for {model_name}:")
-        print(f"{'Index':<6}{'Ground Truth':<15}{'Prediction':<15}{'Confidence':<12}")
-        for i in range(min(10, len(true_labels))):
-            print(
-                f"{i:<6}{true_labels[i]:<15}{preds[i]:<15}{confidences[i]:<12.4f}")
-        print("-" * 40)
+            accuracy, report, preds, true_labels, confidences, avg_eval_loss, perplexity = evaluate_model(
+                model_trained, test_dataloader, device)
+            benchmark_results[model_name] = {
+                "accuracy": accuracy,
+                "report": report,
+                "avg_eval_loss": avg_eval_loss,
+                "perplexity": perplexity
+            }
+            model_predictions[model_name] = preds
+            model_confidences[model_name] = confidences
+            if model_true_labels is None:
+                model_true_labels = true_labels
 
-        if args.checkpoint is not None:
-            torch.save(model_trained.state_dict(), args.checkpoint)
-            tokenizer.save_pretrained(os.path.dirname(args.checkpoint))
+            logging.info(f"{model_name} Evaluation Accuracy: {accuracy:.4f}")
+            logging.info(f"{model_name} Classification Report:\n{report}")
             logging.info(
-                f"Final model and tokenizer saved to {args.checkpoint} and its directory.")
+                f"{model_name} Average Eval Loss: {avg_eval_loss:.4f} | Perplexity: {perplexity:.4f}")
+            print(f"{model_name} Evaluation Accuracy: {accuracy:.4f}")
+            print(f"{model_name} Classification Report:")
+            print(report)
+            print(
+                f"{model_name} Average Evaluation Loss: {avg_eval_loss:.4f} | Perplexity: {perplexity:.4f}")
 
-        torch.cuda.empty_cache()
+            print(
+                f"\nComparison of ground truth, predictions, and confidences for {model_name}:")
+            print(f"{'Index':<6}{'Ground Truth':<15}{'Prediction':<15}{'Confidence':<12}")
+            for i in range(min(10, len(true_labels))):
+                print(
+                    f"{i:<6}{true_labels[i]:<15}{preds[i]:<15}{confidences[i]:<12.4f}")
+            print("-" * 40)
 
-        # Save benchmark results to a JSON file with the same base name as the log
-        result_filepath = log_filepath.replace('.log', '_results.json')
-        with open(result_filepath, 'w') as f:
-            json.dump({
-                "configuration": {
-                    "model": model_name,
-                    "dataset": args.dataset_name,
-                    "epochs": args.epochs,
-                    "patience": PATIENCE,
-                    "batch_size": args.batch_size,
-                    "learning_rate": args.learning_rate,
-                    "max_sequence_length": args.max_size,
-                    "freeze_layers": args.freeze
-                },
-                "results": {
-                    model_name: {
-                        "accuracy": float(accuracy),
-                        "avg_eval_loss": float(avg_eval_loss),
-                        "perplexity": float(perplexity)
+            if args.checkpoint is not None:
+                torch.save(model_trained.state_dict(), args.checkpoint)
+                tokenizer.save_pretrained(os.path.dirname(args.checkpoint))
+                logging.info(
+                    f"Final model and tokenizer saved to {args.checkpoint} and its directory.")
+
+            torch.cuda.empty_cache()
+
+            # Save benchmark results to a JSON file with the same base name as the log
+            result_filepath = log_filepath.replace('.log', '_results.json')
+            with open(result_filepath, 'w') as f:
+                json.dump({
+                    "configuration": {
+                        "model": model_name,
+                        "dataset": args.dataset_name,
+                        "epochs": args.epochs,
+                        "patience": PATIENCE,
+                        "batch_size": args.batch_size,
+                        "learning_rate": args.learning_rate,
+                        "max_sequence_length": args.max_size,
+                        "freeze_layers": args.freeze
+                    },
+                    "results": {
+                        model_name: {
+                            "accuracy": float(accuracy),
+                            "avg_eval_loss": float(avg_eval_loss),
+                            "perplexity": float(perplexity)
+                        }
                     }
-                }
-            }, f, indent=2)
-        logging.info(f"Results saved to {result_filepath}")
-        print(f"Detailed results saved to {result_filepath}")
+                }, f, indent=2)
+            logging.info(f"Results saved to {result_filepath}")
+            print(f"Detailed results saved to {result_filepath}")
 
-        print("\nBenchmarking Complete. Summary of Results:")
-        for m_name, metrics in benchmark_results.items():
-            print(f"{m_name}: Accuracy = {metrics['accuracy']:.4f} | Perplexity = {metrics['perplexity']:.4f}")
+            print("\nBenchmarking Complete. Summary of Results:")
+            for m_name, metrics in benchmark_results.items():
+                print(f"{m_name}: Accuracy = {metrics['accuracy']:.4f} | Perplexity = {metrics['perplexity']:.4f}")
 
-    main()
+        main()
+    except FileNotFoundError as e:
+        logging.error(f"Dataset Error: {str(e)}")
+        print(f"ERROR: {str(e)}")
+        print("Make sure to run with --preprocess-flag to prepare the dataset files first.")
+    except Exception as e:
+        logging.error(f"Unexpected error: {str(e)}", exc_info=True)
+        print(f"ERROR: An unexpected error occurred: {str(e)}")
