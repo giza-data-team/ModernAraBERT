@@ -21,11 +21,40 @@ import pandas as pd
 from datasets import Dataset, DatasetDict, load_dataset
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, AutoConfig
 from farasa.segmenter import FarasaSegmenter
+from arabert import ArabertPreprocessor
+
+
+HF_TOKEN = "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"
+
+# Set up custom cache directories for Hugging Face
+CACHE_DIR = "./cache"
+HF_DATASETS_CACHE = os.path.join(CACHE_DIR, "datasets")
+HF_TRANSFORMERS_CACHE = os.path.join(CACHE_DIR, "transformers")
+
+# Create cache directories if they don't exist
+os.makedirs(HF_DATASETS_CACHE, exist_ok=True)
+os.makedirs(HF_TRANSFORMERS_CACHE, exist_ok=True)
+
+# Set environment variables for Hugging Face cache locations
+os.environ['HF_HOME'] = CACHE_DIR
+# os.environ['HF_DATASETS_CACHE'] = HF_DATASETS_CACHE
+# os.environ['TRANSFORMERS_CACHE'] = HF_TRANSFORMERS_CACHE
 
 # Arabic Text Preprocessing with Farasa and Punctuation Fixes
 
-# Initialize the FarasaSegmenter (interactive mode)
-farasa_segmenter = FarasaSegmenter(interactive=True)
+# Add singleton pattern for Farasa segmenter
+_farasa_segmenter = None
+
+def get_farasa_segmenter():
+    """
+    Get or create a Farasa segmenter instance using singleton pattern.
+    This ensures only one instance per process.
+    """
+    global _farasa_segmenter
+    if _farasa_segmenter is None:
+        model_name="bert-base-arabert"
+        _farasa_segmenter = ArabertPreprocessor(model_name=model_name)
+    return _farasa_segmenter
 
 def preprocess_with_farasa(text):
     """
@@ -37,9 +66,9 @@ def preprocess_with_farasa(text):
     Returns:
         str: The segmented and cleaned text.
     """
-    text = re.sub(r'[()\[\]:«»""''—_,;!?|/\\]', '', text)
+    text = re.sub(r'[()\[\]:«»“”‘’—_,;!?|/\\]', '', text)
     text = re.sub(r'(\-\-|\[\]|\.\.)', '', text)
-    return farasa_segmenter.segment(text)
+    return get_farasa_segmenter().preprocess(text)
 
 def fix_punctuation_spacing(text):
     """
@@ -66,7 +95,7 @@ def is_arabic_text(text):
     Returns:
         bool: True if the text matches the Arabic characters pattern, otherwise False.
     """
-    arabic_pattern = re.compile(r'^[\u0600-\u06FF\s.,،؛؟!:\-–—«»""''…(){}\[\]/ـ]+$')
+    arabic_pattern = re.compile(r'^[\u0600-\u06FF\s.,،؛؟!:\-–—«»“”‘’…(){}\[\]/ـ]+$')
     return bool(arabic_pattern.match(text))
 
 def split_text_into_chunks(text, window_size):
@@ -98,7 +127,7 @@ def process_text(text, window_size=8192):
     processed_text = preprocess_with_farasa(text)
     processed_text = fix_punctuation_spacing(processed_text)
     words = processed_text.split()
-    return split_text_into_chunks(processed_text, window_size) if len(words) > window_size else [processed_text]
+    return [processed_text[:window_size]] if len(words) > window_size else [processed_text]
 
 # Training routines 
 
@@ -124,9 +153,22 @@ def train_model(model, train_dataloader, val_dataloader, device, num_epochs=3, l
     Returns:
         model: The trained model (best version if early stopping occurred).
     """
-    optimizer = AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=learning_rate)
+    # Initialize optimizer with weight decay (no scheduler)
+    no_decay = ['bias', 'LayerNorm.weight']
+    optimizer_grouped_parameters = [
+        {
+            'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+            'weight_decay': 0.01
+        },
+        {
+            'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+            'weight_decay': 0.0
+        }
+    ]
+    optimizer = AdamW(optimizer_grouped_parameters, lr=learning_rate)
+    
     if device.type == "cuda":
-        scaler = torch.cuda.amp.GradScaler()
+        scaler = torch.amp.GradScaler()
     else:
         scaler = None
 
@@ -138,7 +180,8 @@ def train_model(model, train_dataloader, val_dataloader, device, num_epochs=3, l
     best_val_loss = float('inf')
     patience_counter = 0
     best_model_state = None
-
+    global_step = 0
+    
     for epoch in range(num_epochs):
         model.train()
         epoch_loss = 0
@@ -147,6 +190,7 @@ def train_model(model, train_dataloader, val_dataloader, device, num_epochs=3, l
         for batch in progress_bar:
             optimizer.zero_grad()
             batch = {k: v.to(device) for k, v in batch.items()}
+            
             if scaler is not None:
                 with torch.amp.autocast("cuda"):
                     outputs = model(**batch)
@@ -159,9 +203,15 @@ def train_model(model, train_dataloader, val_dataloader, device, num_epochs=3, l
                 loss = outputs.loss
                 loss.backward()
                 optimizer.step()
+                
+            global_step += 1
+            
             epoch_loss += loss.item()
-            progress_bar.set_postfix({'batch_loss': f'{loss.item():.4f}'})
-            logging.debug(f"Training Epoch {epoch+1} Batch Loss = {loss.item():.4f}")  # Only log at debug level
+            progress_bar.set_postfix({
+                'batch_loss': f'{loss.item():.4f}',
+                'lr': f'{learning_rate:.2e}'
+            })
+            logging.debug(f"Training Epoch {epoch+1} Batch Loss = {loss.item():.4f}, LR = {learning_rate:.2e}")
             
         avg_train_loss = epoch_loss / len(train_dataloader)
         logging.info(f"Epoch {epoch+1}/{num_epochs} - Average Train Loss: {avg_train_loss:.4f}")
@@ -171,7 +221,7 @@ def train_model(model, train_dataloader, val_dataloader, device, num_epochs=3, l
         logging.info(f"Validation Loss after Epoch {epoch+1}: {avg_val_loss:.4f}")
         print(f"Validation Loss after Epoch {epoch+1}: {avg_val_loss:.4f}")
 
-        if avg_val_loss < best_val_loss:
+        if avg_val_loss <= best_val_loss:
             best_val_loss = avg_val_loss
             best_model_state = copy.deepcopy(model.state_dict())
             patience_counter = 0
@@ -215,8 +265,9 @@ def evaluate_model(model, eval_dataloader, device):
     all_confidences = []
     total_loss = 0
     total_batches = 0
+    progress_bar = tqdm(eval_dataloader, desc="Evaluating", leave=False)
     
-    for batch in tqdm(eval_dataloader, desc="Evaluating", leave=False):
+    for batch in progress_bar:
         batch = {k: v.to(device) for k, v in batch.items()}
         if device.type == "cuda":
             with torch.amp.autocast("cuda"):
@@ -235,7 +286,8 @@ def evaluate_model(model, eval_dataloader, device):
         labels_batch = batch["labels"].cpu().tolist()
         all_preds.extend(preds.cpu().tolist())
         all_labels.extend(labels_batch)
-        logging.info(f"Evaluation Batch Loss = {loss.item():.4f}")
+        progress_bar.set_postfix({'batch_loss': f'{loss.item():.4f}'})
+        logging.debug(f"Evaluation Batch Loss = {loss.item():.4f}")
 
     avg_loss = total_loss / total_batches if total_batches > 0 else 0
     perplexity = math.exp(avg_loss)
@@ -278,7 +330,7 @@ def process_dataset(dataset: Dataset, window_size: int, base_dir: str, dataset_t
         if text is None or not isinstance(text, str) or text.strip() == "":
             continue 
         doc_id = example.get("id", None)
-        label = example.get("label", None)
+        label = example.get("labels", example.get("label", None))  # Try 'labels' first, fall back to 'label'
         
         # Convert label to numeric format
         label = convert_label(label, dataset_type)
@@ -296,7 +348,7 @@ def process_dataset(dataset: Dataset, window_size: int, base_dir: str, dataset_t
     final_dataset = Dataset.from_dict({
         "id": processed_ids,
         "text": processed_texts,
-        "label": processed_labels
+        "labels": processed_labels  # Changed from 'label' to 'labels'
     })
     split_dataset = final_dataset.train_test_split(test_size=0.4, seed=42)
     test_val_split = split_dataset["test"].train_test_split(test_size=0.5, seed=42)
@@ -311,8 +363,8 @@ def process_dataset(dataset: Dataset, window_size: int, base_dir: str, dataset_t
         file_path = os.path.join(base_dir, f"{split}.txt")
         with open(file_path, "w", encoding="utf-8") as f:
             for example in dataset_dict[split]:
-                if example["label"] is not None:
-                    text_line = f"{example['id']}\t{example['text']}\t{example['label']}"
+                if example["labels"] is not None:  # Changed from 'label' to 'labels'
+                    text_line = f"{example['id']}\t{example['text']}\t{example['labels']}"  # Changed from 'label' to 'labels'
                 else:
                     text_line = f"{example['id']}\t{example['text']}"
                 f.write(text_line + "\n")
@@ -387,14 +439,15 @@ def load_sentiment_dataset(file_path, tokenizer, max_length=512, dataset_type="h
 
     # Load the dataset using Hugging Face's datasets
     dataset = load_dataset(
-        'text',
+        'csv',
         data_files={'data': file_path},
         delimiter='\t',
-        column_names=['id', 'text', 'label']
+        column_names=['id', 'text', 'labels'],
+        cache_dir=HF_DATASETS_CACHE
     )['data']
 
     # Filter examples with invalid labels
-    dataset = dataset.filter(lambda x: x['label'] is not None and str(x['label']).strip() != "")
+    dataset = dataset.filter(lambda x: x['labels'] is not None and str(x['labels']).strip() != "" and x['text'] is not None and str(x['text']).strip() != "")
 
     def tokenize_function(examples):
         return tokenizer(
@@ -417,7 +470,7 @@ def load_sentiment_dataset(file_path, tokenizer, max_length=512, dataset_type="h
     if len(tokenized_dataset) == 0:
         logging.warning(f"No valid samples loaded from {file_path}.")
     else:
-        labels = tokenized_dataset['label']
+        labels = tokenized_dataset['labels']  # Changed from 'label' to 'labels'
         logging.info(f"Loaded {len(tokenized_dataset)} samples from {file_path}. Label range: min={min(labels)}, max={max(labels)}")
     
     return tokenized_dataset
@@ -438,20 +491,23 @@ def prepare_astd_benchmark(data_dir, astd_info):
         astd_info["url"],
         sep="\t",
         header=None,
-        names=["text", "label"],
+        names=["text", "labels"],
         engine="python",
         quoting=csv.QUOTE_NONE
     )
     main_df["id"] = main_df.index.astype(str)
     
-    # Convert labels before saving
-    main_df["label"] = main_df["label"].apply(lambda x: convert_label(x, "astd"))
-    # Filter out rows with None labels
-    main_df = main_df.dropna(subset=["label"])
-    # Ensure label is integer
-    main_df["label"] = main_df["label"].astype(int)
     
-    main_df = main_df[["id", "text", "label"]]
+    # Apply Farasa segmentation to text
+    main_df["text"] = main_df["text"].apply(lambda x: process_text(x)[0] if isinstance(x, str) else x)
+    # Convert labels before saving
+    main_df["labels"] = main_df["labels"].apply(lambda x: convert_label(x, "astd"))
+    # Filter out rows with None labels
+    main_df = main_df.dropna(subset=["labels"])
+    # Ensure label is integer
+    main_df["labels"] = main_df["labels"].astype(int)
+    
+    main_df = main_df[["id", "text", "labels"]]
     
     train_ids = pd.read_csv(astd_info["benchmark_train"], header=None, names=["id"], dtype=str)
     train_ids["id"] = train_ids["id"].str.strip()
@@ -493,12 +549,16 @@ def prepare_labr_benchmark(data_dir, labr_info):
     # Convert labels using the convert_label function
     main_df["rating"] = main_df["rating"].apply(lambda x: convert_label(x, "labr"))
     main_df = main_df.dropna(subset=["rating"])
-    main_df["label"] = main_df["rating"].astype(int)
+    main_df["labels"] = main_df["rating"].astype(int)
     
     main_df = main_df.reset_index()  
     main_df["id"] = main_df["index"].astype(int).astype(str)
     main_df["text"] = main_df["review"].astype(str).str.strip()
-    main_df = main_df[["id", "text", "label"]]
+        
+    # Apply Farasa segmentation to text
+    main_df["text"] = main_df["text"].apply(lambda x: process_text(x)[0] if isinstance(x, str) else x)
+
+    main_df = main_df[["id", "text", "labels"]]
     
     print("Sample main file IDs (index-based):", main_df["id"].head(5).tolist())
     
@@ -549,7 +609,7 @@ datasets_dict = {
     },
     "astd": {
         "name": "ASTD",
-        "num_labels": 2,
+        "num_labels": 4,
         "load_type": "csv",
         "url": "https://raw.githubusercontent.com/mahmoudnabil/ASTD/master/data/Tweets.txt?raw=true",
         "benchmark_train": "https://raw.githubusercontent.com/mahmoudnabil/ASTD/master/data/4class-balanced-train.txt?raw=true",
@@ -577,7 +637,8 @@ datasets_dict = {
 
 models = {
     "modernbert": "./model_checkpoints/checkpoint_step_13000/",
-    "arabert": "aubmindlab/bert-base-arabert"
+    "arabert": "aubmindlab/bert-base-arabert",
+    "distilbert": "shahendaadel211/arabic-distilbert-model"
 }
 
 def create_dataloader(dataset, batch_size, num_workers, shuffle=False):
@@ -601,7 +662,7 @@ def create_dataloader(dataset, batch_size, num_workers, shuffle=False):
         pin_memory=True
     )
 
-def prepare_dataset(dataset_name, data_dir, dataset_info, preprocess_flag=False, use_streaming=False):
+def prepare_dataset(dataset_name, data_dir, dataset_info, preprocess_flag=False):
     """
     Prepare dataset files if they don't exist and preprocess_flag is True.
     If preprocess_flag is False, only load from local storage and throw error if files don't exist.
@@ -611,7 +672,6 @@ def prepare_dataset(dataset_name, data_dir, dataset_info, preprocess_flag=False,
         data_dir (str): Directory to store dataset files
         dataset_info (dict): Dataset configuration
         preprocess_flag (bool): Whether to prepare datasets (True) or only load from local (False)
-        use_streaming (bool): Whether to use streaming mode
         
     Raises:
         FileNotFoundError: If preprocess_flag is False and dataset files don't exist
@@ -644,12 +704,14 @@ def prepare_dataset(dataset_name, data_dir, dataset_info, preprocess_flag=False,
     # Only proceed with preparation if preprocess_flag is True
     print(f"Preparing {dataset_name} dataset...")
     
-    if use_streaming:
-        print("Streaming mode enabled. Skipping in-memory processing and splitting.")
-        return
-
     if dataset_name == "hard":
-        dataset = load_dataset("Elnagara/hard", "plain_text", split="train", token=HF_TOKEN)
+        dataset = load_dataset(
+            "Elnagara/hard",
+            "plain_text",
+            split="train",
+            token=HF_TOKEN,
+            cache_dir=HF_DATASETS_CACHE
+        )
         process_dataset(dataset, window_size=8192, base_dir=data_dir, dataset_type=dataset_name)
     elif dataset_name == "astd":
         prepare_astd_benchmark(data_dir, dataset_info)
@@ -676,11 +738,20 @@ def configure_model(model_name, model_path, num_labels, device, freeze=False):
     Returns:
         tuple: (model, tokenizer)
     """
-    tokenizer_path = model_path if model_name == "arabert" else MODERN_BERT_TOKENIZER_PATH
+    tokenizer_path = model_path if model_name != "modernbert" else MODERN_BERT_TOKENIZER_PATH
     
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, token=HF_TOKEN)
+    tokenizer = AutoTokenizer.from_pretrained(
+        tokenizer_path,
+        # token=HF_TOKEN,
+        cache_dir=HF_TRANSFORMERS_CACHE
+    )
     
-    config = AutoConfig.from_pretrained(model_path, num_labels=num_labels, token=HF_TOKEN)
+    config = AutoConfig.from_pretrained(
+        model_path,
+        num_labels=num_labels,
+        # token=HF_TOKEN,
+        cache_dir=HF_TRANSFORMERS_CACHE
+    )
     model = AutoModelForSequenceClassification.from_config(config)
     model.classifier = nn.Linear(model.config.hidden_size, num_labels)
     
@@ -695,7 +766,7 @@ def configure_model(model_name, model_path, num_labels, device, freeze=False):
 
 # Main Benchmarking Script 
 
-HF_TOKEN = "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"
+
 
 """
 Arguments:
@@ -713,13 +784,12 @@ Arguments:
 - --continue-from-checkpoint: Resume training from a saved checkpoint.
 - --preprocess-flag: Skip preprocessing if already done.
 - --save-every: Save checkpoint every N epochs.
-- --use-streaming: Use streaming mode for dataset (splitting not supported in streaming mode).
 - --patience: Patience for early stopping if validation loss doesn't improve.
 """
 
 parser = argparse.ArgumentParser("Sentiment Analysis Benchmarking")
 parser.add_argument("--model-name", dest="model_name", type=str, default='modernbert',
-                    choices=['modernbert', 'arabert'])
+                    choices=['modernbert', 'arabert', 'distilbert'])
 parser.add_argument("--dataset", dest="dataset_name", type=str, default='hard',
                     choices=['hard', 'astd', 'labr', 'ajgt'])
 parser.add_argument("--benchmark", dest="benchmark", action='store_true',
@@ -732,18 +802,16 @@ parser.add_argument("--learning-rate", dest="learning_rate",
 parser.add_argument("--split-ratio", dest="split_ratio", type=str, default="0.6,0.2,0.2",
                     help="Train, Test, Validation split ratios, comma separated")
 parser.add_argument("--num-workers", dest="num_workers", type=int, default=2)
-parser.add_argument("--freeze", dest="freeze", action='store_true',
+parser.add_argument("--freeze", dest="freeze", type=bool, default=True,
                     help="Freeze model parameters except classifier head")
 parser.add_argument("--checkpoint", dest="checkpoint", type=str, default=None,
                     help="Path to save/load model checkpoint")
 parser.add_argument("--continue-from-checkpoint", dest="continue_from_checkpoint", action='store_true',
                     help="Flag to load from a saved checkpoint and continue training")
-parser.add_argument("--preprocess-flag", dest="preprocess_flag", action='store_true',
+parser.add_argument("--preprocess-flag", dest="preprocess_flag", type=bool, default=True,
                     help="If True, preprocess and prepare datasets. If False, only load from local storage.")
 parser.add_argument("--save-every", dest="save_every", type=int, default=None,
                     help="Save checkpoint every N epochs (if provided)")
-parser.add_argument("--use-streaming", dest="use_streaming", action='store_true',
-                    help="Use streaming mode for dataset (splitting not supported in streaming mode)")
 parser.add_argument("--patience", dest="patience", type=int, default=5,
                     help="Early stopping patience value")
 args = parser.parse_args()
@@ -763,9 +831,9 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(), logging.FileHandler(log_filepath)],
     force=True,
 )
-logging.info(f"Starting benchmarking for model {args.model_name} on dataset {args.dataset_name}")
-logging.info(f"Configuration: epochs={args.epochs}, patience={PATIENCE}, batch_size={args.batch_size}")
-print(f"Logging to {log_filepath}")
+# logging.info(f"Starting benchmarking for model {args.model_name} on dataset {args.dataset_name}")
+# logging.info(f"Configuration: epochs={args.epochs}, patience={PATIENCE}, batch_size={args.batch_size}")
+# print(f"Logging to {log_filepath}")
 
 PARENT_PATH = "./data"
 
@@ -793,7 +861,7 @@ if torch.cuda.is_available():
 if __name__ == '__main__':
     chosen_dataset = args.dataset_name.lower()
     try:
-        prepare_dataset(chosen_dataset, DATA_DIR, datasets_dict[chosen_dataset], args.preprocess_flag, args.use_streaming)
+        prepare_dataset(chosen_dataset, DATA_DIR, datasets_dict[chosen_dataset], args.preprocess_flag)
 
         EVAL_FILE = TEST_FILE if args.benchmark else (
             VAL_FILE if chosen_dataset != "labr" else TEST_FILE)
