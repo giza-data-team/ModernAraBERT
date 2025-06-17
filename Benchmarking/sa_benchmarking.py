@@ -66,6 +66,9 @@ def preprocess_with_farasa(text):
     Returns:
         str: The segmented and cleaned text.
     """
+    # Process hashtags first (before other cleaning)
+    text = process_hashtags(text)
+    
     text = re.sub(r'[()\[\]:«»“”‘’—_,;!?|/\\]', '', text)
     text = re.sub(r'(\-\-|\[\]|\.\.)', '', text)
     return get_farasa_segmenter().preprocess(text)
@@ -129,6 +132,32 @@ def process_text(text, window_size=8192):
     words = processed_text.split()
     return [processed_text[:window_size]] if len(words) > window_size else [processed_text]
 
+def process_hashtags(text):
+    """
+    Process Arabic hashtags: extract meaningful content, handle compounds, remove noise.
+    """
+    import re
+    
+    # Remove noise hashtags first
+    noise_patterns = [
+        r'#متابعة\b', r'#ريتويت\b', r'#فولو\b', r'#تابع\b',
+        r'#follow\b', r'#rt\b', r'#retweet\b'
+    ]
+    for noise in noise_patterns:
+        text = re.sub(noise, '', text, flags=re.IGNORECASE)
+    
+    # Process compound hashtags with underscores: #كلمة_أخرى -> كلمة أخرى
+    def replace_compound(match):
+        hashtag = match.group(1)  # Get content after #
+        # Split on underscores and join with spaces
+        words = hashtag.split('_')
+        return ' '.join(words)
+    
+    # Handle compound hashtags: #[\u0600-\u06FFa-zA-Z0-9_]+
+    text = re.sub(r'#([\u0600-\u06FFa-zA-Z0-9_]+)', replace_compound, text)
+    
+    return text
+
 # Training routines 
 
 def train_model(model, train_dataloader, val_dataloader, device, num_epochs=3, learning_rate=2e-5, patience=2,
@@ -153,19 +182,7 @@ def train_model(model, train_dataloader, val_dataloader, device, num_epochs=3, l
     Returns:
         model: The trained model (best version if early stopping occurred).
     """
-    # Initialize optimizer with weight decay (no scheduler)
-    no_decay = ['bias', 'LayerNorm.weight']
-    optimizer_grouped_parameters = [
-        {
-            'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
-            'weight_decay': 0.01
-        },
-        {
-            'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
-            'weight_decay': 0.0
-        }
-    ]
-    optimizer = AdamW(optimizer_grouped_parameters, lr=learning_rate)
+    optimizer = AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=learning_rate)
     
     if device.type == "cuda":
         scaler = torch.amp.GradScaler()
@@ -636,7 +653,7 @@ datasets_dict = {
 }
 
 models = {
-    "modernbert": "./model_checkpoints/checkpoint_step_13000/",
+    "modernbert": "./checkpoint_step_13000/",
     "arabert": "aubmindlab/bert-base-arabert",
     "distilbert": "shahendaadel211/arabic-distilbert-model"
 }
@@ -753,7 +770,7 @@ def configure_model(model_name, model_path, num_labels, device, freeze=False):
         cache_dir=HF_TRANSFORMERS_CACHE
     )
     model = AutoModelForSequenceClassification.from_config(config)
-    model.classifier = nn.Linear(model.config.hidden_size, num_labels)
+    # model.classifier = nn.Linear(model.config.hidden_size, num_labels)
     
     if freeze:
         for name, param in model.named_parameters():
@@ -792,7 +809,7 @@ parser.add_argument("--model-name", dest="model_name", type=str, default='modern
                     choices=['modernbert', 'arabert', 'distilbert'])
 parser.add_argument("--dataset", dest="dataset_name", type=str, default='hard',
                     choices=['hard', 'astd', 'labr', 'ajgt'])
-parser.add_argument("--benchmark", dest="benchmark", action='store_true',
+parser.add_argument("--benchmark", dest="benchmark", action='store_true', default=False,
                     help="Use test set for evaluation instead of validation set")
 parser.add_argument("--max-size", dest="max_size", type=int, default=512)
 parser.add_argument("--batch-size", dest="batch_size", type=int, default=16)
@@ -802,13 +819,13 @@ parser.add_argument("--learning-rate", dest="learning_rate",
 parser.add_argument("--split-ratio", dest="split_ratio", type=str, default="0.6,0.2,0.2",
                     help="Train, Test, Validation split ratios, comma separated")
 parser.add_argument("--num-workers", dest="num_workers", type=int, default=2)
-parser.add_argument("--freeze", dest="freeze", type=bool, default=True,
+parser.add_argument("--freeze", dest="freeze", action='store_true', default=False,
                     help="Freeze model parameters except classifier head")
 parser.add_argument("--checkpoint", dest="checkpoint", type=str, default=None,
                     help="Path to save/load model checkpoint")
-parser.add_argument("--continue-from-checkpoint", dest="continue_from_checkpoint", action='store_true',
+parser.add_argument("--continue-from-checkpoint", dest="continue_from_checkpoint", action='store_true', default=False,
                     help="Flag to load from a saved checkpoint and continue training")
-parser.add_argument("--preprocess-flag", dest="preprocess_flag", type=bool, default=True,
+parser.add_argument("--preprocess-flag", dest="preprocess_flag", action='store_true', default=False,
                     help="If True, preprocess and prepare datasets. If False, only load from local storage.")
 parser.add_argument("--save-every", dest="save_every", type=int, default=None,
                     help="Save checkpoint every N epochs (if provided)")
@@ -837,7 +854,7 @@ logging.basicConfig(
 
 PARENT_PATH = "./data"
 
-MODERN_BERT_TOKENIZER_PATH = "./Tokenizer"
+MODERN_BERT_TOKENIZER_PATH = "./"
 
 DATA_DIR = f"{PARENT_PATH}/{args.dataset_name.lower()}"
 
