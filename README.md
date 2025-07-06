@@ -142,6 +142,3 @@ This project is licensed under the MIT License.
 - AraBERT
 - Arabic NLP research community
 
----
-
-> Created and maintained by Giza Data Team
