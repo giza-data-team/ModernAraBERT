@@ -1,0 +1,66 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "ModernAraBERT: Efficient Adaptation of English Language Models for Arabic"
+authors:
+  - family-names: "Eldamaty"
+    given-names: "Ahmed"
+    email: "ahmed.aldamati@gizasystems.com"
+    affiliation: "Giza Systems"
+  - family-names: "Maher"
+    given-names: "Mohamed"
+    email: "mohamed.abdelrahman@ut.ee"
+    affiliation: "University of Tartu"
+    orcid: "https://orcid.org/0000-0000-0000-0000"
+  - family-names: "Mostafa"
+    given-names: "Mohamed"
+    email: "ibrahim.mohamed@gizasystems.com"
+    affiliation: "Giza Systems"
+  - family-names: "Ashraf"
+    given-names: "Mariam"
+    email: "mariam.ashraf@gizasystems.com"
+    affiliation: "Giza Systems"
+  - family-names: "ElShawi"
+    given-names: "Radwa"
+    email: "radwa.elshawi@ut.ee"
+    affiliation: "University of Tartu"
+repository-code: "https://github.com/giza-data-team/ModernAraBERT"
+url: "https://huggingface.co/gizadatateam/ModernAraBERT"
+abstract: >
+  ModernAraBERT is a resource-efficient adaptation of the English-pretrained
+  ModernBERT model to Arabic. Our approach leverages continued pretraining on
+  large curated Arabic corpora, followed by lightweight task-specific fine-tuning
+  with frozen encoder backbones. This strategy preserves cross-lingual knowledge
+  while effectively capturing Arabic morphology, offering a practical alternative
+  to training monolingual models from scratch.
+keywords:
+  - Arabic NLP
+  - Language Modeling
+  - Transfer Learning
+  - BERT
+  - Sentiment Analysis
+  - Named Entity Recognition
+  - Question Answering
+  - Low-Resource Languages
+license: MIT
+version: 1.0.0
+date-released: "2025-01-15"
+preferred-citation:
+  type: conference-paper
+  title: "Efficient Adaptation of English Language Models for Low-Resource and Morphologically Rich Languages: The Case of Arabic"
+  authors:
+    - family-names: "Eldamaty"
+      given-names: "Ahmed"
+    - family-names: "Maher"
+      given-names: "Mohamed"
+    - family-names: "Mostafa"
+      given-names: "Mohamed"
+    - family-names: "Ashraf"
+      given-names: "Mariam"
+    - family-names: "ElShawi"
+      given-names: "Radwa"
+  collection-title: "Proceedings of the 2026 Joint International Conference on Computational Linguistics, Language Resources and Evaluation (LREC-COLING 2026)"
+  year: 2026
+  conference:
+    name: "LREC-COLING 2026"
+

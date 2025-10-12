@@ -1,0 +1,151 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+conda_env/
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Data directories
+data/raw/
+data/interim/
+data/processed/
+data/external/
+datasets/
+*.tar.gz
+*.zip
+*.bz2
+*.rar
+
+# Model checkpoints
+checkpoints/
+output/
+model_checkpoints/
+*.pt
+*.pth
+*.bin
+*.safetensors
+
+# Tokenizer files (except config)
+Tokenizer/
+tokenizer/
+
+# Logs
+*.log
+logs/
+Training-Memory-Investigation.log
+pipeline.log
+
+# Temporary files
+tmp/
+temp/
+.cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+*~
+.directory
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Profiling
+*.prof
+
+# Environment variables
+.env
+.env.local
+
+# Large files
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+
+# Compiled translations
+*.mo
+
+# PyBuilder
+target/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# Weights and biases
+wandb/
+
+# Hugging Face cache
+.huggingface/
+
+# Generated results
+results/*.csv
+results/*.json
+results/*.txt
+
+# Exclude paper LaTeX auxiliary files but keep source
+*.aux
+*.bbl
+*.blg
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+*.out
+

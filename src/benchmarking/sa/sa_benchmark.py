@@ -1,0 +1,525 @@
+"""
+Sentiment Analysis Benchmarking Module for ModernAraBERT
+
+This module provides the main benchmarking orchestrator for evaluating models on SA tasks:
+- Supports multiple datasets: HARD, ASTD, LABR, AJGT
+- Supports multiple models: ModernAraBERT, AraBERT, mBERT, etc.
+- Fine-tuning with frozen encoders
+- Comprehensive evaluation with Macro-F1, loss, and perplexity
+- Memory usage tracking
+- Result logging and JSON export
+
+Original file: "sa_benchmarking.py"
+Status: Logic unchanged, improved modularity and imports
+"""
+
+import os
+import logging
+import random
+import json
+import csv
+import numpy as np
+import torch
+import torch.nn as nn
+import psutil
+import pandas as pd
+from datetime import datetime
+from typing import Dict, Optional, Tuple
+from datasets import load_dataset, Dataset
+from torch.utils.data import DataLoader
+from transformers import (
+    AutoTokenizer,
+    AutoModelForSequenceClassification,
+    AutoConfig
+)
+
+# Import from local modules
+from .datasets import (
+    DATASET_CONFIGS,
+    load_sentiment_dataset,
+    prepare_astd_benchmark,
+    prepare_labr_benchmark
+)
+from .preprocessing import process_dataset
+from .train import train_model, evaluate_model
+
+
+# Suppress tokenizers parallelism warning
+os.environ.setdefault('TOKENIZERS_PARALLELISM', 'false')
+
+
+# Model configurations
+MODEL_CONFIGS = {
+    "modernbert": {
+        "path": None,  # To be set via command line
+        "tokenizer_path": None  # To be set via command line
+    },
+    "arabert": {
+        "path": "aubmindlab/bert-base-arabert",
+        "tokenizer_path": None  # Use same as model
+    },
+    "mbert": {
+        "path": "google-bert/bert-base-multilingual-cased",
+        "tokenizer_path": None
+    },
+    "arabert2": {
+        "path": "aubmindlab/bert-base-arabertv2",
+        "tokenizer_path": None
+    },
+    "marbert": {
+        "path": "UBC-NLP/MARBERTv2",
+        "tokenizer_path": None
+    },
+}
+
+
+def setup_logging(model_name: str, dataset_name: str, epochs: int, patience: int, log_dir: str = "./logs") -> Tuple[logging.Logger, str]:
+    """
+    Configure logging for benchmarking.
+
+    Args:
+        model_name (str): Model identifier
+        dataset_name (str): Dataset name
+        epochs (int): Number of epochs
+        patience (int): Early stopping patience
+        log_dir (str): Directory for log files
+
+    Returns:
+        tuple: (logger instance, log file path)
+    """
+    os.makedirs(log_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_filename = f"SA_Benchmark_{model_name}_{dataset_name}_{epochs}ep_p{patience}_{timestamp}.log"
+    log_filepath = os.path.join(log_dir, log_filename)
+    
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[logging.StreamHandler(), logging.FileHandler(log_filepath)],
+        force=True,
+    )
+    
+    logger = logging.getLogger(__name__)
+    logger.info(f"Starting benchmarking for model {model_name} on dataset {dataset_name}")
+    logger.info(f"Configuration: epochs={epochs}, patience={patience}")
+    print(f"Logging to {log_filepath}")
+    
+    return logger, log_filepath
+
+
+def get_memory_usage() -> Dict[str, float]:
+    """
+    Get current RAM and VRAM usage statistics.
+    
+    Returns:
+        Dict containing memory usage information:
+            - ram_used_gb: RAM currently in use (GB)
+            - ram_percent: Percentage of total RAM in use
+            - vram_used_gb: VRAM currently in use (GB)
+            - vram_total_gb: Total VRAM available (GB)
+            - vram_percent: Percentage of VRAM in use
+    """
+    memory_stats = {}
+    
+    # Get RAM usage
+    process = psutil.Process(os.getpid())
+    ram_used_bytes = process.memory_info().rss  # Resident Set Size
+    ram_used_gb = ram_used_bytes / (1024 ** 3)
+    memory_stats["ram_used_gb"] = ram_used_gb
+    memory_stats["ram_percent"] = psutil.virtual_memory().percent
+    
+    # Get VRAM usage if CUDA is available
+    if torch.cuda.is_available():
+        try:
+            torch.cuda.synchronize()
+            vram_used_bytes = torch.cuda.memory_allocated()
+            vram_total_bytes = torch.cuda.get_device_properties(0).total_memory
+            
+            vram_used_gb = vram_used_bytes / (1024 ** 3)
+            vram_total_gb = vram_total_bytes / (1024 ** 3)
+            vram_percent = (vram_used_bytes / vram_total_bytes) * 100
+            
+            memory_stats["vram_used_gb"] = vram_used_gb
+            memory_stats["vram_total_gb"] = vram_total_gb
+            memory_stats["vram_percent"] = vram_percent
+        except Exception as e:
+            logging.warning(f"Could not get VRAM usage: {e}")
+            memory_stats["vram_used_gb"] = 0.0
+            memory_stats["vram_total_gb"] = 0.0
+            memory_stats["vram_percent"] = 0.0
+    else:
+        memory_stats["vram_used_gb"] = 0.0
+        memory_stats["vram_total_gb"] = 0.0
+        memory_stats["vram_percent"] = 0.0
+    
+    return memory_stats
+
+
+def set_seed(seed: int = 42):
+    """Set random seeds for reproducibility."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+def run_sa_benchmark(
+    model_name: str,
+    dataset_name: str,
+    model_path: str,
+    tokenizer_path: Optional[str],
+    data_dir: str,
+    num_labels: int,
+    batch_size: int = 16,
+    max_length: int = 512,
+    epochs: int = 50,
+    learning_rate: float = 2e-5,
+    patience: int = 5,
+    num_workers: int = 2,
+    freeze_encoder: bool = True,
+    checkpoint_path: Optional[str] = None,
+    continue_from_checkpoint: bool = False,
+    save_every: Optional[int] = None,
+    hf_token: Optional[str] = None,
+    log_dir: str = "./logs",
+    seed: int = 42
+) -> Dict:
+    """
+    Main benchmarking function for sentiment analysis.
+
+    Args:
+        model_name (str): Model identifier
+        dataset_name (str): Dataset name (hard, astd, labr, ajgt)
+        model_path (str): Path to pretrained model
+        tokenizer_path (str): Path to tokenizer (None = use model_path)
+        data_dir (str): Directory containing dataset files
+        num_labels (int): Number of classes
+        batch_size (int): Training batch size (default: 16)
+        max_length (int): Maximum sequence length (default: 512)
+        epochs (int): Number of training epochs (default: 50)
+        learning_rate (float): Learning rate (default: 2e-5)
+        patience (int): Early stopping patience (default: 5)
+        num_workers (int): DataLoader workers (default: 2)
+        freeze_encoder (bool): Freeze encoder layers (default: True)
+        checkpoint_path (str): Path to save/load checkpoints
+        continue_from_checkpoint (bool): Resume from checkpoint
+        save_every (int): Save checkpoint every N epochs
+        hf_token (str): HuggingFace token for private models
+        log_dir (str): Directory for logs
+        seed (int): Random seed (default: 42)
+
+    Returns:
+        dict: Benchmark results including metrics and configuration
+    """
+    # Setup
+    logger, log_filepath = setup_logging(model_name, dataset_name, epochs, patience, log_dir)
+    set_seed(seed)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    logger.info(f"Using device: {device}")
+    
+    # Load tokenizer
+    if tokenizer_path is None:
+        tokenizer_path = model_path
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, token=hf_token)
+    
+    # Load model configuration
+    config = AutoConfig.from_pretrained(model_path, num_labels=num_labels, token=hf_token)
+    model = AutoModelForSequenceClassification.from_config(config)
+    
+    # Replace classifier head
+    hidden_size = model.config.hidden_size
+    model.classifier = nn.Linear(hidden_size, num_labels)
+    
+    # Freeze encoder if requested
+    if freeze_encoder:
+        for name, param in model.named_parameters():
+            if "classifier" not in name:
+                param.requires_grad = False
+        logger.info("Encoder layers frozen, only classifier will be trained")
+    
+    model.to(device)
+    
+    # Prepare file paths
+    train_file = os.path.join(data_dir, "train.txt")
+    val_file = os.path.join(data_dir, "validation.txt")
+    test_file = os.path.join(data_dir, "test.txt")
+    
+    # Determine dataset type for label mapping
+    dataset_type = dataset_name.lower()
+    
+    # Load training data
+    logger.info(f"Loading training data from {train_file}")
+    train_samples = load_sentiment_dataset(
+        train_file,
+        tokenizer,
+        None,
+        num_labels=num_labels,
+        max_length=max_length,
+        dataset_type=dataset_type
+    )
+    
+    if len(train_samples) == 0:
+        logger.error(f"No training samples loaded for model {model_name}.")
+        raise Exception("No training samples.")
+    
+    train_dataloader = DataLoader(
+        train_samples,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=True
+    )
+    
+    # Load validation data (if available)
+    if dataset_name.lower() == "labr":
+        logger.warning("No validation set for LABR dataset; validation will be skipped.")
+        val_dataloader = None
+    else:
+        logger.info(f"Loading validation data from {val_file}")
+        val_samples = load_sentiment_dataset(
+            val_file,
+            tokenizer,
+            None,
+            num_labels=num_labels,
+            max_length=max_length,
+            dataset_type=dataset_type
+        )
+        
+        if len(val_samples) == 0:
+            logger.error(f"No validation samples loaded for model {model_name}.")
+            raise Exception("No validation samples.")
+        
+        val_dataloader = DataLoader(
+            val_samples,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=True
+        )
+    
+    # Log initial memory usage
+    initial_memory = get_memory_usage()
+    logger.info("Initial memory usage before training:")
+    logger.info(f"  RAM: {initial_memory['ram_used_gb']:.2f} GB ({initial_memory['ram_percent']:.1f}%)")
+    if torch.cuda.is_available():
+        logger.info(f"  VRAM: {initial_memory['vram_used_gb']:.2f} GB ({initial_memory['vram_percent']:.1f}%)")
+    
+    # Train model
+    logger.info(f"Starting training for model: {model_name}")
+    model = train_model(
+        model,
+        train_dataloader,
+        val_dataloader,
+        device,
+        num_epochs=epochs,
+        learning_rate=learning_rate,
+        patience=patience,
+        checkpoint_path=checkpoint_path,
+        continue_from_checkpoint=continue_from_checkpoint,
+        save_every=save_every
+    )
+    
+    # Log final memory usage
+    final_memory = get_memory_usage()
+    logger.info("Final memory usage after training:")
+    logger.info(f"  RAM: {final_memory['ram_used_gb']:.2f} GB ({final_memory['ram_percent']:.1f}%)")
+    if torch.cuda.is_available():
+        logger.info(f"  VRAM: {final_memory['vram_used_gb']:.2f} GB ({final_memory['vram_percent']:.1f}%)")
+    
+    # Load test data
+    logger.info(f"Loading test data from {test_file}")
+    test_samples = load_sentiment_dataset(
+        test_file,
+        tokenizer,
+        None,
+        num_labels=num_labels,
+        max_length=max_length,
+        dataset_type=dataset_type
+    )
+    
+    test_dataloader = DataLoader(
+        test_samples,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=True
+    )
+    
+    # Evaluate on test set
+    logger.info("Evaluating on test set...")
+    macro_f1, report, preds, true_labels, confidences, avg_eval_loss, perplexity = evaluate_model(
+        model, test_dataloader, device
+    )
+    
+    logger.info(f"{model_name} Evaluation Macro-F1: {macro_f1:.4f}")
+    logger.info(f"{model_name} Classification Report:\n{report}")
+    logger.info(f"{model_name} Average Eval Loss: {avg_eval_loss:.4f} | Perplexity: {perplexity:.4f}")
+    
+    print(f"\n{model_name} Evaluation Results:")
+    print(f"  Macro-F1: {macro_f1:.4f}")
+    print(f"  Average Loss: {avg_eval_loss:.4f}")
+    print(f"  Perplexity: {perplexity:.4f}")
+    print(f"\nClassification Report:")
+    print(report)
+    
+    # Print sample predictions
+    print(f"\nSample predictions (first 10):")
+    print(f"{'Index':<6}{'Ground Truth':<15}{'Prediction':<15}{'Confidence':<12}")
+    for i in range(min(10, len(true_labels))):
+        print(f"{i:<6}{true_labels[i]:<15}{preds[i]:<15}{confidences[i]:<12.4f}")
+    
+    # Save final checkpoint if requested
+    if checkpoint_path is not None:
+        torch.save(model.state_dict(), checkpoint_path)
+        tokenizer.save_pretrained(os.path.dirname(checkpoint_path))
+        logger.info(f"Final model and tokenizer saved to {checkpoint_path}")
+    
+    # Clear CUDA cache
+    torch.cuda.empty_cache()
+    
+    # Prepare results dictionary
+    results = {
+        "configuration": {
+            "model": model_name,
+            "dataset": dataset_name,
+            "epochs": epochs,
+            "patience": patience,
+            "batch_size": batch_size,
+            "learning_rate": learning_rate,
+            "max_sequence_length": max_length,
+            "freeze_layers": freeze_encoder,
+            "seed": seed
+        },
+        "hardware_usage": {
+            "initial_memory": {
+                "ram_used_gb": float(initial_memory['ram_used_gb']),
+                "ram_percent": float(initial_memory['ram_percent']),
+                "vram_used_gb": float(initial_memory['vram_used_gb']),
+                "vram_total_gb": float(initial_memory['vram_total_gb']),
+                "vram_percent": float(initial_memory['vram_percent'])
+            },
+            "final_memory": {
+                "ram_used_gb": float(final_memory['ram_used_gb']),
+                "ram_percent": float(final_memory['ram_percent']),
+                "vram_used_gb": float(final_memory['vram_used_gb']),
+                "vram_total_gb": float(final_memory['vram_total_gb']),
+                "vram_percent": float(final_memory['vram_percent'])
+            }
+        },
+        "results": {
+            model_name: {
+                "macro_f1": float(macro_f1),
+                "avg_eval_loss": float(avg_eval_loss),
+                "perplexity": float(perplexity)
+            }
+        }
+    }
+    
+    # Save results to JSON
+    result_filepath = log_filepath.replace('.log', '_results.json')
+    with open(result_filepath, 'w') as f:
+        json.dump(results, f, indent=2)
+    
+    logger.info(f"Results saved to {result_filepath}")
+    print(f"\nDetailed results saved to {result_filepath}")
+    
+    # Print summary
+    print("\nBenchmarking Complete!")
+    print(f"  Model: {model_name}")
+    print(f"  Dataset: {dataset_name}")
+    print(f"  Macro-F1: {macro_f1:.4f}")
+    print(f"  Perplexity: {perplexity:.4f}")
+    print(f"\nHardware Usage:")
+    print(f"  Initial RAM: {initial_memory['ram_used_gb']:.2f} GB ({initial_memory['ram_percent']:.1f}%)")
+    print(f"  Final RAM: {final_memory['ram_used_gb']:.2f} GB ({final_memory['ram_percent']:.1f}%)")
+    if torch.cuda.is_available():
+        print(f"  Initial VRAM: {initial_memory['vram_used_gb']:.2f} GB ({initial_memory['vram_percent']:.1f}%)")
+        print(f"  Final VRAM: {final_memory['vram_used_gb']:.2f} GB ({final_memory['vram_percent']:.1f}%)")
+    
+    return results
+
+
+if __name__ == "__main__":
+    import argparse
+    
+    parser = argparse.ArgumentParser("Sentiment Analysis Benchmarking for ModernAraBERT")
+    
+    # Model and dataset
+    parser.add_argument("--model-name", type=str, default='modernbert',
+                        choices=['modernbert', 'arabert', 'mbert', 'arabert2', 'marbert'],
+                        help="Model to benchmark")
+    parser.add_argument("--model-path", type=str, required=True,
+                        help="Path to pretrained model")
+    parser.add_argument("--tokenizer-path", type=str, default=None,
+                        help="Path to tokenizer (default: same as model)")
+    parser.add_argument("--dataset", type=str, default='hard',
+                        choices=['hard', 'astd', 'labr', 'ajgt'],
+                        help="Dataset to evaluate on")
+    parser.add_argument("--data-dir", type=str, required=True,
+                        help="Directory containing dataset files")
+    
+    # Training parameters
+    parser.add_argument("--batch-size", type=int, default=16,
+                        help="Batch size (default: 16)")
+    parser.add_argument("--max-length", type=int, default=512,
+                        help="Maximum sequence length (default: 512)")
+    parser.add_argument("--epochs", type=int, default=50,
+                        help="Number of epochs (default: 50)")
+    parser.add_argument("--learning-rate", type=float, default=2e-5,
+                        help="Learning rate (default: 2e-5)")
+    parser.add_argument("--patience", type=int, default=5,
+                        help="Early stopping patience (default: 5)")
+    parser.add_argument("--num-workers", type=int, default=2,
+                        help="DataLoader workers (default: 2)")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed (default: 42)")
+    
+    # Model options
+    parser.add_argument("--no-freeze", action="store_true",
+                        help="Train full model (don't freeze encoder)")
+    
+    # Checkpointing
+    parser.add_argument("--checkpoint", type=str, default=None,
+                        help="Path to save/load model checkpoint")
+    parser.add_argument("--continue-from-checkpoint", action="store_true",
+                        help="Load from checkpoint and continue training")
+    parser.add_argument("--save-every", type=int, default=None,
+                        help="Save checkpoint every N epochs")
+    
+    # Other
+    parser.add_argument("--hf-token", type=str, default=None,
+                        help="HuggingFace token for private models")
+    parser.add_argument("--log-dir", type=str, default="./logs",
+                        help="Directory for log files (default: ./logs)")
+    
+    args = parser.parse_args()
+    
+    # Get dataset configuration
+    dataset_config = DATASET_CONFIGS.get(args.dataset.lower())
+    if dataset_config is None:
+        raise ValueError(f"Unknown dataset: {args.dataset}")
+    
+    # Run benchmark
+    results = run_sa_benchmark(
+        model_name=args.model_name,
+        dataset_name=args.dataset,
+        model_path=args.model_path,
+        tokenizer_path=args.tokenizer_path,
+        data_dir=args.data_dir,
+        num_labels=dataset_config["num_labels"],
+        batch_size=args.batch_size,
+        max_length=args.max_length,
+        epochs=args.epochs,
+        learning_rate=args.learning_rate,
+        patience=args.patience,
+        num_workers=args.num_workers,
+        freeze_encoder=not args.no_freeze,
+        checkpoint_path=args.checkpoint,
+        continue_from_checkpoint=args.continue_from_checkpoint,
+        save_every=args.save_every,
+        hf_token=args.hf_token,
+        log_dir=args.log_dir,
+        seed=args.seed
+    )
+
