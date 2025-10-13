@@ -19,6 +19,7 @@ import rarfile
 from tqdm import tqdm
 import json
 import logging
+import time
 
 
 
@@ -82,6 +83,26 @@ def download_from_drive(drive_link, output_path):
         logging.info(f"Error: Could not process link - {drive_link}")
 
 
+def _is_valid_bz2_file(file_path):
+    """
+    Quick validation for bz2 files by checking magic bytes and minimal size.
+
+    Returns:
+        bool: True if file looks like a valid bz2 stream, False otherwise.
+    """
+    try:
+        if not os.path.exists(file_path):
+            return False
+        # Require non-trivial size
+        if os.path.getsize(file_path) < 1024:  # 1KB heuristic
+            return False
+        with open(file_path, 'rb') as f:
+            magic = f.read(3)
+            return magic == b'BZh'
+    except Exception:
+        return False
+
+
 def download_direct_link_binary(link, output_path):
     """
     Download a file in binary mode from a direct link and save it to output_path.
@@ -91,12 +112,54 @@ def download_direct_link_binary(link, output_path):
         output_path (str): The output file path where the binary data will be written.
     """
     logging.info(f"Starting download_direct_link_binary with link: {link}, output_path: {output_path}")
-    response = requests.get(link, stream=True)
-    with open(output_path, "wb") as file:
-        for chunk in tqdm(response.iter_content(chunk_size=1024)):
-            if chunk:
-                file.write(chunk)
-    logging.info(f"Downloaded (binary): {output_path}")
+
+    headers = {
+        "User-Agent": "ModernAraBERT/1.0 (+https://github.com/your-org/your-repo; contact: you@example.com)"
+    }
+
+    max_retries = 3
+    backoff_seconds = 2
+    last_err = None
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            with requests.get(link, stream=True, headers=headers, timeout=60) as response:
+                # Fail fast on HTTP errors
+                response.raise_for_status()
+
+                content_type = response.headers.get('Content-Type')
+                content_length = response.headers.get('Content-Length')
+                logging.info(f"HTTP 200 from {link} (Content-Type={content_type}, Content-Length={content_length})")
+
+                # Stream download to disk
+                with open(output_path, "wb") as file:
+                    for chunk in tqdm(response.iter_content(chunk_size=1024)):
+                        if chunk:
+                            file.write(chunk)
+
+            # Post-download validation for bz2 files
+            if output_path.endswith('.bz2') and not _is_valid_bz2_file(output_path):
+                # Delete invalid artifact to avoid confusing later stages
+                try:
+                    os.remove(output_path)
+                except Exception:
+                    pass
+                raise ValueError("Downloaded file is not a valid bz2 archive (magic/size check failed)")
+
+            # Success
+            size_on_disk = os.path.getsize(output_path) if os.path.exists(output_path) else 0
+            logging.info(f"Downloaded (binary): {output_path} (size={size_on_disk} bytes)")
+            return
+
+        except Exception as e:
+            last_err = e
+            logging.info(f"Attempt {attempt}/{max_retries} failed for {link}: {e}")
+            if attempt < max_retries:
+                time.sleep(backoff_seconds)
+                backoff_seconds *= 2
+
+    # Exhausted retries
+    raise RuntimeError(f"Failed to download {link} after {max_retries} attempts: {last_err}")
 
 
 def download_direct_link_text(link, output_path):
@@ -162,6 +225,8 @@ def extract_bz2(file_path, output_path):
     """
     logging.info(f"Starting extract_bz2 for {file_path} to {output_path}")
     try:
+        if not _is_valid_bz2_file(file_path):
+            raise ValueError("Input is not a valid bz2 archive (magic/size check failed)")
         with bz2.BZ2File(file_path, "rb") as bz2_file:
             with open(output_path, "wb") as output_file:
                 output_file.write(bz2_file.read())
@@ -310,10 +375,13 @@ def extract_all_compressed(input_dir, output_dir):
         file_path = os.path.join(input_dir, filename)
         
         if filename.endswith('.bz2'):
-            # Extract bz2 file
+            # Extract bz2 file only if valid
             output_path = os.path.join(output_dir, filename.replace('.bz2', ''))
-            extract_bz2(file_path, output_path)
-            extracted_files.append(output_path)
+            if _is_valid_bz2_file(file_path):
+                extract_bz2(file_path, output_path)
+                extracted_files.append(output_path)
+            else:
+                logging.info(f"Skipping invalid bz2 file (magic/size failed): {file_path}")
             
         elif filename.endswith('.rar'):
             # Extract rar archive
