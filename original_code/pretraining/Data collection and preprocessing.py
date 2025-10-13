@@ -478,7 +478,7 @@ def clean_text(text):
 
 
 def process_xml_file(input_file_path, output_file_path):
-   """
+    """
     Process a single XML file by extracting text from <text> elements, combining non-empty lines,
     cleaning the text, and writing the result to a text file if it contains at least 100 words.
 

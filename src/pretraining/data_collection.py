@@ -16,24 +16,31 @@ import gdown
 import requests
 import bz2
 import rarfile
-import shutil
 from tqdm import tqdm
 import json
-from pathlib import Path
-from datetime import datetime
+import logging
 
 
-def log_event(message, log_file="pipeline.log"):
+
+def setup_logging(level=logging.INFO, log_file="data_collection.log"):
     """
-    Log an event message with a timestamp to the pipeline.log file.
-
+    Configure logging for the data collection process.
+    
     Args:
-        message (str): The message to be logged.
-        log_file (str): Path to log file (default: pipeline.log)
+        level: Logging level (default: logging.INFO)
+        log_file: Path to log file (default: data_collection.log)
     """
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(log_file, "a", encoding="utf-8") as f:
-        f.write(f"[{timestamp}] {message}\n")
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler()
+        ],
+        force=True
+    )
+    logging.info("Logging initialized for data collection")
+
 
 
 def create_directory(directory_path):
@@ -43,9 +50,9 @@ def create_directory(directory_path):
     Args:
         directory_path (str): The path of the directory to create.
     """
-    log_event(f"Attempting to create directory: {directory_path}")
+    logging.info(f"Attempting to create directory: {directory_path}")
     os.makedirs(directory_path, exist_ok=True)
-    log_event(f"Created directory: {directory_path}")
+    logging.info(f"Created directory: {directory_path}")
 
 
 def download_from_drive(drive_link, output_path):
@@ -59,7 +66,7 @@ def download_from_drive(drive_link, output_path):
     Raises:
         ValueError: If the provided drive link is invalid.
     """
-    log_event(f"Starting download_from_drive with link: {drive_link}, output_path: {output_path}")
+    logging.info(f"Starting download_from_drive with link: {drive_link}, output_path: {output_path}")
     try:
         if '/d/' in drive_link:
             file_id = drive_link.split('/d/')[1].split('/view')[0]
@@ -68,15 +75,11 @@ def download_from_drive(drive_link, output_path):
                 output_path,
                 quiet=False
             )
-            message = f"Downloaded (Drive): {output_path}"
-            print(message)
-            log_event(message)
+            logging.info(f"Downloaded (Drive): {output_path}")
         else:
             raise ValueError("Invalid Google Drive link.")
     except IndexError:
-        error_message = f"Error: Could not process link - {drive_link}"
-        print(error_message)
-        log_event(error_message)
+        logging.info(f"Error: Could not process link - {drive_link}")
 
 
 def download_direct_link_binary(link, output_path):
@@ -87,15 +90,13 @@ def download_direct_link_binary(link, output_path):
         link (str): The direct URL to the file.
         output_path (str): The output file path where the binary data will be written.
     """
-    log_event(f"Starting download_direct_link_binary with link: {link}, output_path: {output_path}")
+    logging.info(f"Starting download_direct_link_binary with link: {link}, output_path: {output_path}")
     response = requests.get(link, stream=True)
     with open(output_path, "wb") as file:
         for chunk in tqdm(response.iter_content(chunk_size=1024)):
             if chunk:
                 file.write(chunk)
-    message = f"Downloaded (binary): {output_path}"
-    print(message)
-    log_event(message)
+    logging.info(f"Downloaded (binary): {output_path}")
 
 
 def download_direct_link_text(link, output_path):
@@ -106,15 +107,13 @@ def download_direct_link_text(link, output_path):
         link (str): The direct URL to the text file.
         output_path (str): The file path to save the downloaded text.
     """
-    log_event(f"Starting download_direct_link_text with link: {link}, output_path: {output_path}")
+    logging.info(f"Starting download_direct_link_text with link: {link}, output_path: {output_path}")
     response = requests.get(link, stream=True)
     with open(output_path, "w", encoding="utf-8") as file:
         for chunk in tqdm(response.iter_content(chunk_size=1024)):
             if chunk:
                 file.write(chunk.decode('utf-8', errors='ignore'))
-    message = f"Downloaded (text): {output_path}"
-    print(message)
-    log_event(message)
+    logging.info(f"Downloaded (text): {output_path}")
 
 
 def extract_bz2(file_path, output_path):
@@ -125,18 +124,14 @@ def extract_bz2(file_path, output_path):
         file_path (str): Path to the .bz2 file.
         output_path (str): Path where the extracted content should be saved.
     """
-    log_event(f"Starting extract_bz2 for {file_path} to {output_path}")
+    logging.info(f"Starting extract_bz2 for {file_path} to {output_path}")
     try:
-        with bz2.open(file_path, "rb") as bz2_file:
+        with bz2.BZ2File(file_path, "rb") as bz2_file:
             with open(output_path, "wb") as output_file:
-                shutil.copyfileobj(bz2_file, output_file)
-        message = f"Extracted (bz2): {output_path}"
-        print(message)
-        log_event(message)
+                output_file.write(bz2_file.read())
+        logging.info(f"Extracted (bz2): {output_path}")
     except Exception as e:
-        error_message = f"Error extracting {file_path}: {e}"
-        print(error_message)
-        log_event(error_message)
+        logging.info(f"Error extracting {file_path}: {e}")
 
 
 def extract_rar(file_path, output_dir):
@@ -147,17 +142,13 @@ def extract_rar(file_path, output_dir):
         file_path (str): Path to the .rar file.
         output_dir (str): Directory where the extracted content should be placed.
     """
-    log_event(f"Starting extract_rar for {file_path} to {output_dir}")
+    logging.info(f"Starting extract_rar for {file_path} to {output_dir}")    
     try:
         with rarfile.RarFile(file_path) as rar_ref:
             rar_ref.extractall(output_dir)
-        message = f"Extracted (rar): {file_path} to {output_dir}"
-        print(message)
-        log_event(message)
+        logging.info(f"Extracted (rar): {file_path} to {output_dir}")
     except Exception as e:
-        error_message = f"Error extracting {file_path}: {e}"
-        print(error_message)
-        log_event(error_message)
+        logging.info(f"Error extracting {file_path}: {e}")
 
 
 def download_datasets_from_links(links_json_path, output_dir):
@@ -171,7 +162,7 @@ def download_datasets_from_links(links_json_path, output_dir):
     Returns:
         dict: Summary of downloaded files
     """
-    log_event(f"Loading dataset links from {links_json_path}")
+    logging.info(f"Loading dataset links from {links_json_path}")
     
     with open(links_json_path, 'r', encoding='utf-8') as f:
         links_data = json.load(f)
@@ -186,7 +177,7 @@ def download_datasets_from_links(links_json_path, output_dir):
     
     # Download text links
     if 'text_links' in links_data:
-        log_event(f"Processing {len(links_data['text_links'])} text links")
+        logging.info(f"Processing {len(links_data['text_links'])} text links")
         for name, link in links_data['text_links'].items():
             try:
                 output_path = os.path.join(output_dir, f"{name}.txt.bz2")
@@ -198,13 +189,12 @@ def download_datasets_from_links(links_json_path, output_dir):
                 
                 downloaded_files['text'].append(output_path)
             except Exception as e:
-                error_msg = f"Failed to download {name}: {e}"
-                log_event(error_msg)
+                logging.info(f"Failed to download {name}: {e}")
                 downloaded_files['failed'].append((name, str(e)))
     
     # Download XML links
     if 'xml_links' in links_data:
-        log_event(f"Processing {len(links_data['xml_links'])} XML links")
+        logging.info(f"Processing {len(links_data['xml_links'])} XML links")
         for name, link in links_data['xml_links'].items():
             try:
                 output_path = os.path.join(output_dir, f"{name}.xml.bz2")
@@ -216,13 +206,12 @@ def download_datasets_from_links(links_json_path, output_dir):
                 
                 downloaded_files['xml'].append(output_path)
             except Exception as e:
-                error_msg = f"Failed to download {name}: {e}"
-                log_event(error_msg)
+                logging.info(f"Failed to download {name}: {e}")
                 downloaded_files['failed'].append((name, str(e)))
     
     # Download one billion links
     if 'links_one_billion' in links_data:
-        log_event(f"Processing {len(links_data['links_one_billion'])} One Billion Word links")
+        logging.info(f"Processing {len(links_data['links_one_billion'])} One Billion Word links")
         for name, link in links_data['links_one_billion'].items():
             try:
                 output_path = os.path.join(output_dir, f"{name}.xml")
@@ -234,12 +223,11 @@ def download_datasets_from_links(links_json_path, output_dir):
                 
                 downloaded_files['xml'].append(output_path)
             except Exception as e:
-                error_msg = f"Failed to download {name}: {e}"
-                log_event(error_msg)
+                logging.info(f"Failed to download {name}: {e}")
                 downloaded_files['failed'].append((name, str(e)))
     
     # Log summary
-    log_event(f"Download complete: {len(downloaded_files['text'])} text files, "
+    logging.info(f"Download complete: {len(downloaded_files['text'])} text files, "
               f"{len(downloaded_files['xml'])} XML files, "
               f"{len(downloaded_files['failed'])} failed")
     
@@ -257,7 +245,7 @@ def extract_all_compressed(input_dir, output_dir):
     Returns:
         list: Paths to extracted files
     """
-    log_event(f"Extracting compressed files from {input_dir} to {output_dir}")
+    logging.info(f"Extracting compressed files from {input_dir} to {output_dir}")
     create_directory(output_dir)
     
     extracted_files = []
@@ -278,8 +266,50 @@ def extract_all_compressed(input_dir, output_dir):
             for extracted_file in os.listdir(output_dir):
                 extracted_files.append(os.path.join(output_dir, extracted_file))
     
-    log_event(f"Extracted {len(extracted_files)} files")
+    logging.info(f"Extracted {len(extracted_files)} files")
     return extracted_files
+
+
+def download_and_extract_all_datasets(links_json_path, output_dir):
+    """
+    Download all datasets from links.json and extract compressed files.
+    
+    This is a convenience function that combines downloading and extraction.
+    
+    Args:
+        links_json_path (str): Path to links.json configuration file
+        output_dir (str): Directory to save downloaded and extracted files
+        
+    Returns:
+        dict: Summary of downloaded and extracted files
+    """
+    logger = logging.getLogger(__name__)
+    logger.info("Starting download and extraction process")
+    logger.info(f"Links file: {links_json_path}")
+    logger.info(f"Output directory: {output_dir}")
+    
+    # Download datasets
+    logger.info("Phase 1: Downloading datasets...")
+    download_results = download_datasets_from_links(links_json_path, output_dir)
+    
+    # Extract compressed files
+    logger.info("Phase 2: Extracting compressed files...")
+    extracted_dir = os.path.join(output_dir, "extracted")
+    extracted_files = extract_all_compressed(output_dir, extracted_dir)
+    
+    # Combine results
+    combined_results = {
+        'downloaded': download_results,
+        'extracted': extracted_files,
+        'extracted_dir': extracted_dir
+    }
+    
+    logger.info("Download and extraction complete!")
+    logger.info(f"Downloaded: {len(download_results['text']) + len(download_results['xml'])} files")
+    logger.info(f"Extracted: {len(extracted_files)} files")
+    logger.info(f"Extracted files location: {extracted_dir}")
+    
+    return combined_results
 
 
 if __name__ == "__main__":
@@ -308,20 +338,20 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     # Download datasets
-    print("Starting dataset download...")
+    logging.info("Starting dataset download...")
     results = download_datasets_from_links(args.links_json, args.output_dir)
     
-    print(f"\nDownload Summary:")
-    print(f"  Text files: {len(results['text'])}")
-    print(f"  XML files: {len(results['xml'])}")
-    print(f"  Failed: {len(results['failed'])}")
+    logging.info("Download Summary:")
+    logging.info(f"  Text files: {len(results['text'])}")
+    logging.info(f"  XML files: {len(results['xml'])}")
+    logging.info(f"  Failed: {len(results['failed'])}")
     
     # Extract if requested
     if args.extract:
-        print("\nExtracting compressed files...")
+        logging.info("Extracting compressed files...")
         extracted_dir = os.path.join(args.output_dir, "extracted")
         extracted = extract_all_compressed(args.output_dir, extracted_dir)
-        print(f"Extracted {len(extracted)} files to {extracted_dir}")
+        logging.info(f"Extracted {len(extracted)} files to {extracted_dir}")
     
-    print("\nDone! Check pipeline.log for details.")
+    logging.info("Done! Check data_collection.log for details.")
 
