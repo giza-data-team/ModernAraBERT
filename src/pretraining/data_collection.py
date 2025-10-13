@@ -116,6 +116,42 @@ def download_direct_link_text(link, output_path):
     logging.info(f"Downloaded (text): {output_path}")
 
 
+def download_huggingface_dataset(dataset_name, output_path):
+    """
+    Download HuggingFace dataset and extract text field to a text file.
+    
+    Each article's text is written as a separate line in the output file.
+    
+    Args:
+        dataset_name (str): HuggingFace dataset identifier (e.g., "MohamedRashad/arabic-billion-words")
+        output_path (str): Path where the text file will be saved
+    """
+    logging.info(f"Starting download_huggingface_dataset: {dataset_name} to {output_path}")
+    
+    try:
+        from datasets import load_dataset
+        
+        # Load the dataset with default configuration
+        dataset = load_dataset(dataset_name, split='train')
+        
+        # Extract text field and write to file
+        article_count = 0
+        with open(output_path, "w", encoding="utf-8") as f:
+            for row in tqdm(dataset, desc="Extracting HuggingFace data"):
+                text = row.get("text", "").strip()
+                if text:
+                    # Write each article as a single line
+                    f.write(text.replace('\n', ' ') + "\n")
+                    article_count += 1
+        
+        logging.info(f"Downloaded HuggingFace dataset: ({article_count} articles) to {output_path}")
+        return True
+        
+    except Exception as e:
+        logging.error(f"Failed to download HuggingFace dataset: {e}")
+        return False
+
+
 def extract_bz2(file_path, output_path):
     """
     Extract a .bz2 compressed file to output_path.
@@ -172,15 +208,34 @@ def download_datasets_from_links(links_json_path, output_dir):
     downloaded_files = {
         'text': [],
         'xml': [],
+        'huggingface': [],
         'failed': []
     }
+    
+    # Download HuggingFace datasets
+    if 'huggingface_datasets' in links_data:
+        logging.info(f"Processing {len(links_data['huggingface_datasets'])} HuggingFace datasets")
+        for name, hf_dataset_name in links_data['huggingface_datasets'].items():
+            try:
+                output_path = os.path.join(output_dir, f"{name}.txt")
+                
+                success = download_huggingface_dataset(hf_dataset_name, output_path)
+                if success:
+                    downloaded_files['huggingface'].append(output_path)
+                else:
+                    downloaded_files['failed'].append((name, "HuggingFace download failed"))
+                    
+            except Exception as e:
+                logging.info(f"Failed to download {name}: {e}")
+                downloaded_files['failed'].append((name, str(e)))
     
     # Download text links
     if 'text_links' in links_data:
         logging.info(f"Processing {len(links_data['text_links'])} text links")
         for name, link in links_data['text_links'].items():
             try:
-                output_path = os.path.join(output_dir, f"{name}.txt.bz2")
+                # Fix: Don't add .txt.bz2, just .bz2 since files are already XML
+                output_path = os.path.join(output_dir, f"{name}.xml.bz2")
                 
                 if '/drive.google.com/' in link:
                     download_from_drive(link, output_path)
@@ -209,7 +264,7 @@ def download_datasets_from_links(links_json_path, output_dir):
                 logging.info(f"Failed to download {name}: {e}")
                 downloaded_files['failed'].append((name, str(e)))
     
-    # Download one billion links
+    # Download one billion links (kept for backwards compatibility, but should be empty now)
     if 'links_one_billion' in links_data:
         logging.info(f"Processing {len(links_data['links_one_billion'])} One Billion Word links")
         for name, link in links_data['links_one_billion'].items():
@@ -227,7 +282,8 @@ def download_datasets_from_links(links_json_path, output_dir):
                 downloaded_files['failed'].append((name, str(e)))
     
     # Log summary
-    logging.info(f"Download complete: {len(downloaded_files['text'])} text files, "
+    logging.info(f"Download complete: {len(downloaded_files['huggingface'])} HuggingFace files, "
+              f"{len(downloaded_files['text'])} text files, "
               f"{len(downloaded_files['xml'])} XML files, "
               f"{len(downloaded_files['failed'])} failed")
     
@@ -305,7 +361,12 @@ def download_and_extract_all_datasets(links_json_path, output_dir):
     }
     
     logger.info("Download and extraction complete!")
-    logger.info(f"Downloaded: {len(download_results['text']) + len(download_results['xml'])} files")
+    total_downloaded = (len(download_results.get('huggingface', [])) + 
+                       len(download_results['text']) + 
+                       len(download_results['xml']))
+    logger.info(f"Downloaded: {total_downloaded} files")
+    logger.info(f"  - HuggingFace: {len(download_results.get('huggingface', []))} files")
+    logger.info(f"  - Text/XML: {len(download_results['text']) + len(download_results['xml'])} files")
     logger.info(f"Extracted: {len(extracted_files)} files")
     logger.info(f"Extracted files location: {extracted_dir}")
     
