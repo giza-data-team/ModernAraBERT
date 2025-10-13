@@ -15,25 +15,30 @@ Status: Logic unchanged, only extracted preprocessing functions
 import os
 import re
 import random
-from pathlib import Path
 import xml.etree.ElementTree as ET
-from typing import Optional, List, Tuple
+from typing import Optional, Tuple
 from farasa.segmenter import FarasaSegmenter
-from datetime import datetime
+import logging
 
 
-def log_event(message, log_file="pipeline.log"):
+def setup_logging(level=logging.INFO, log_file="data_preprocessing.log"):
     """
-    Log an event message with a timestamp to the pipeline.log file.
+    Configure logging for the data preprocessing process.
 
     Args:
-        message (str): The message to be logged.
-        log_file (str): Path to log file (default: pipeline.log)
+        level: Logging level (default: logging.INFO)
+        log_file: Path to log file (default: data_preprocessing.log)
     """
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(log_file, "a", encoding="utf-8") as f:
-        f.write(f"[{timestamp}] {message}\n")
-
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler()
+        ],
+        force=True
+    )
+    logging.info("Logging initialized for data preprocessing")
 
 def normalize_arabic_word(word: str) -> str:
     """
@@ -86,7 +91,7 @@ def extract_text_blocks(input_directory: str, output_directory: str):
         input_directory (str): Directory containing XML files.
         output_directory (str): Directory where processed text files will be saved.
     """
-    log_event(f"Starting extract_text_blocks from {input_directory} to {output_directory}")
+    logging.info(f"Starting extract_text_blocks from {input_directory} to {output_directory}")
     os.makedirs(output_directory, exist_ok=True)
     pattern = re.compile(r"<Text>(.*?)</Text>", flags=re.DOTALL)
 
@@ -96,7 +101,7 @@ def extract_text_blocks(input_directory: str, output_directory: str):
             base_name, _ = os.path.splitext(filename)
             output_file_path = os.path.join(output_directory, f"processed_{base_name}.txt")
 
-            log_event(f"Processing XML file: {xml_file_path}")
+            logging.info(f"Processing XML file: {xml_file_path}")
 
             with open(xml_file_path, 'r', encoding='utf-8') as f_in:
                 content = f_in.read()
@@ -133,8 +138,8 @@ def extract_text_blocks(input_directory: str, output_directory: str):
                         if word_count >= 100 or word_count <= 8000:
                             f_out.write(normalized_chunk + "\n")
 
-            log_event(f"Extracted text written to: {output_file_path}")
-            print(f"Extracted text written to: {output_file_path}")
+            logging.info(f"Extracted text written to: {output_file_path}")
+            logging.info(f"Extracted text written to: {output_file_path}")
 
 
 def process_text_files(input_directory: str, output_directory: str):
@@ -153,7 +158,7 @@ def process_text_files(input_directory: str, output_directory: str):
         input_directory (str): Directory containing the original text files.
         output_directory (str): Directory where processed text files will be saved.
     """
-    log_event(f"Starting process_text_files from {input_directory} to {output_directory}")
+    logging.info(f"Starting process_text_files from {input_directory} to {output_directory}")
     os.makedirs(output_directory, exist_ok=True)
 
     numeric_prefix_pattern = re.compile(r"^\d+:\d+:")  
@@ -164,7 +169,7 @@ def process_text_files(input_directory: str, output_directory: str):
             input_file_path = os.path.join(input_directory, file_name)
             output_file_path = os.path.join(output_directory, f"processed_{file_name}")
 
-            log_event(f"Processing text file: {input_file_path}")
+            logging.info(f"Processing text file: {input_file_path}")
 
             with open(input_file_path, "r", encoding="utf-8") as infile:
                 lines = infile.readlines()
@@ -209,12 +214,12 @@ def process_text_files(input_directory: str, output_directory: str):
                     for sentence in processed_sentences:
                         outfile.write(sentence + "\n")
                 message = f"Processed file: {file_name} -> {output_file_path}"
-                print(message)
-                log_event(message)
+                logging.info(message)
+                logging.info(message)
             else:
                 message = f"Processed file: {file_name} -> No data to write."
-                print(message)
-                log_event(message)
+                logging.info(message)
+                logging.info(message)
 
 
 def process_xml_file(input_file_path: str, output_file_path: str):
@@ -226,7 +231,7 @@ def process_xml_file(input_file_path: str, output_file_path: str):
         input_file_path (str): Path to the input XML file.
         output_file_path (str): Path where the processed text file will be saved.
     """
-    log_event(f"Starting process_xml_file: {input_file_path} -> {output_file_path}")
+    logging.info(f"Starting process_xml_file: {input_file_path} -> {output_file_path}")
     with open(output_file_path, "w", encoding="utf-8") as output_file:
         context = ET.iterparse(input_file_path, events=("start", "end"))
         sentence_buffer = []
@@ -256,7 +261,7 @@ def process_xml_file(input_file_path: str, output_file_path: str):
                         output_file.write(normalized_sentence + "\n")
                     sentence_buffer = []
                 elem.clear()
-    log_event(f"Completed process_xml_file: {input_file_path}")
+    logging.info(f"Completed process_xml_file: {input_file_path}")
 
 
 def process_xml(input_directory: str, output_directory: str):
@@ -268,7 +273,7 @@ def process_xml(input_directory: str, output_directory: str):
         input_directory (str): Directory containing XML files.
         output_directory (str): Directory where processed text files will be saved.
     """
-    log_event(f"Starting process_directory from {input_directory} to {output_directory}")
+    logging.info(f"Starting process_directory from {input_directory} to {output_directory}")
     os.makedirs(output_directory, exist_ok=True)
     for file_name in os.listdir(input_directory):
         if file_name.endswith(".xml"):
@@ -277,7 +282,7 @@ def process_xml(input_directory: str, output_directory: str):
             output_file_name = f"processed_{base_name}.txt"
             output_file_path = os.path.join(output_directory, output_file_name)
             process_xml_file(input_file_path, output_file_path)
-    log_event(f"Completed process_directory from {input_directory}")
+    logging.info(f"Completed process_directory from {input_directory}")
 
 
 def safe_segment(segmenter: FarasaSegmenter, text: str) -> Optional[str]:
@@ -296,8 +301,8 @@ def safe_segment(segmenter: FarasaSegmenter, text: str) -> Optional[str]:
         return segmenter.segment(text)
     except UnicodeDecodeError as e:
         error_message = f"UnicodeDecodeError while segmenting text: {text[:30]}... Error: {e}"
-        print(error_message)
-        log_event(error_message)
+        logging.error(error_message)
+        logging.info(error_message)
         return None
 
 
@@ -316,7 +321,7 @@ def apply_segmentation_to_file(
         segmenter (FarasaSegmenter): The FarasaSegmenter instance for segmentation.
         batch_size (int, optional): Number of lines to process per chunk. Defaults to 100000.
     """
-    log_event(f"Starting apply_segmentation_to_file: {input_file} -> {output_base}")
+    logging.info(f"Starting apply_segmentation_to_file: {input_file} -> {output_base}")
 
     with open(input_file, "r", encoding="utf-8") as infile:
         chunk_number = 1
@@ -349,11 +354,11 @@ def apply_segmentation_to_file(
                 f"DEBUG: Processing {len(segmented_lines)} lines\n"
                 f"Segmented batch {chunk_number} with {len(segmented_lines)} lines to {output_file}\n"
             )
-            print(chunk_msg)
-            log_event(chunk_msg)
+            logging.info(chunk_msg)
+            logging.info(chunk_msg)
             chunk_number += 1
 
-    log_event(f"Completed segmentation for file: {input_file}")
+    logging.info(f"Completed segmentation for file: {input_file}")
 
 
 def segment_data(output_directory: str, batch_size: int = 1000):
@@ -365,7 +370,7 @@ def segment_data(output_directory: str, batch_size: int = 1000):
         output_directory (str): Directory containing processed text files to segment.
         batch_size (int, optional): Number of lines to process per batch. Defaults to 1000.
     """
-    log_event(f"Starting Segmenting_data in directory: {output_directory}")
+    logging.info(f"Starting Segmenting_data in directory: {output_directory}")
     farasa_segmenter = FarasaSegmenter(interactive=True)
     file_number = 1
     for file_name in os.listdir(output_directory):
@@ -374,13 +379,13 @@ def segment_data(output_directory: str, batch_size: int = 1000):
             output_base = os.path.join(output_directory, f"segmented_{file_number}")
             file_number += 1
             debug_msg = f"\nDEBUG: Processing segmentation for file: {file_name}"
-            print(debug_msg)
-            log_event(debug_msg)
+            logging.info(debug_msg)
+            logging.info(debug_msg)
             apply_segmentation_to_file(input_file_path, output_base, farasa_segmenter, batch_size=batch_size)
             completion_msg = f"DEBUG: Completed segmentation for file: {file_name}"
-            print(completion_msg)
-            log_event(completion_msg)
-    log_event(f"Completed Segmenting_data in directory: {output_directory}")
+            logging.info(completion_msg)
+            logging.info(completion_msg)
+    logging.info(f"Completed Segmenting_data in directory: {output_directory}")
 
 
 def split_data(
@@ -409,7 +414,7 @@ def split_data(
         "Split ratios must sum to 1.0"
 
     random.seed(seed)
-    log_event(f"Starting data split with ratios: train={train_ratio}, val={val_ratio}, test={test_ratio}, seed={seed}")
+    logging.info(f"Starting data split with ratios: train={train_ratio}, val={val_ratio}, test={test_ratio}, seed={seed}")
 
     # Create output directories
     train_dir = os.path.join(output_base_dir, "train")
@@ -427,7 +432,7 @@ def split_data(
             with open(file_path, 'r', encoding='utf-8') as f:
                 lines = [line.strip() for line in f if line.strip()]
                 all_lines.extend(lines)
-                log_event(f"Loaded {len(lines)} lines from {file_name}")
+                logging.info(f"Loaded {len(lines)} lines from {file_name}")
 
     # Shuffle and split
     random.shuffle(all_lines)
@@ -443,20 +448,20 @@ def split_data(
     # Write splits
     with open(os.path.join(train_dir, "train.txt"), 'w', encoding='utf-8') as f:
         f.write("\n".join(train_lines))
-    log_event(f"Wrote {len(train_lines)} lines to train set")
+    logging.info(f"Wrote {len(train_lines)} lines to train set")
 
     with open(os.path.join(val_dir, "validation.txt"), 'w', encoding='utf-8') as f:
         f.write("\n".join(val_lines))
-    log_event(f"Wrote {len(val_lines)} lines to validation set")
+    logging.info(f"Wrote {len(val_lines)} lines to validation set")
 
     with open(os.path.join(test_dir, "test.txt"), 'w', encoding='utf-8') as f:
         f.write("\n".join(test_lines))
-    log_event(f"Wrote {len(test_lines)} lines to test set")
+    logging.info(f"Wrote {len(test_lines)} lines to test set")
 
-    print(f"\nData split complete:")
-    print(f"  Train: {len(train_lines)} lines ({len(train_lines)/total_lines*100:.1f}%)")
-    print(f"  Validation: {len(val_lines)} lines ({len(val_lines)/total_lines*100:.1f}%)")
-    print(f"  Test: {len(test_lines)} lines ({len(test_lines)/total_lines*100:.1f}%)")
+    logging.info("\nData split complete:")
+    logging.info(f"  Train: {len(train_lines)} lines ({len(train_lines)/total_lines*100:.1f}%)")
+    logging.info(f"  Validation: {len(val_lines)} lines ({len(val_lines)/total_lines*100:.1f}%)")
+    logging.info(f"  Test: {len(test_lines)} lines ({len(test_lines)/total_lines*100:.1f}%)")
 
     return train_dir, val_dir, test_dir
 
@@ -507,25 +512,28 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # Initialize logging
+    setup_logging(level=logging.INFO, log_file="data_preprocessing.log")
+
     # Process XML files
     if args.process_xml:
-        print("Processing XML files...")
+        logging.info("Processing XML files...")
         process_xml(args.input_dir, args.output_dir)
 
     # Process text files
     if args.process_text:
-        print("Processing text files...")
+        logging.info("Processing text files...")
         process_text_files(args.input_dir, args.output_dir)
 
     # Apply segmentation
     if args.segment:
-        print("Applying Farasa segmentation...")
+        logging.info("Applying Farasa segmentation...")
         segment_data(args.output_dir, batch_size=args.batch_size)
 
     # Split data
     if args.split:
-        print("Splitting data into train/val/test...")
+        logging.info("Splitting data into train/val/test...")
         split_data(args.output_dir, "./data/processed")
 
-    print("\nPreprocessing complete! Check pipeline.log for details.")
+    logging.info("\nPreprocessing complete! Check data_preprocessing.log for details.")
 
