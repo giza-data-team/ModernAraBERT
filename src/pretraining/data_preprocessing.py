@@ -7,9 +7,6 @@ This module handles all text preprocessing operations including:
 - Text file processing and filtering
 - Farasa morphological segmentation
 - Data splitting (train/val/test)
-
-Original file: "Data collection and preprocessing.py"
-Status: Logic unchanged, only extracted preprocessing functions
 """
 
 import os
@@ -19,26 +16,6 @@ import xml.etree.ElementTree as ET
 from typing import Optional, Tuple
 from farasa.segmenter import FarasaSegmenter
 import logging
-
-
-def setup_logging(level=logging.INFO, log_file="data_preprocessing.log"):
-    """
-    Configure logging for the data preprocessing process.
-
-    Args:
-        level: Logging level (default: logging.INFO)
-        log_file: Path to log file (default: data_preprocessing.log)
-    """
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler()
-        ],
-        force=True
-    )
-    logging.info("Logging initialized for data preprocessing")
 
 def normalize_arabic_word(word: str) -> str:
     """
@@ -139,7 +116,6 @@ def extract_text_blocks(input_directory: str, output_directory: str):
                             f_out.write(normalized_chunk + "\n")
 
             logging.info(f"Extracted text written to: {output_file_path}")
-            logging.info(f"Extracted text written to: {output_file_path}")
 
 
 def process_text_files(input_directory: str, output_directory: str):
@@ -213,13 +189,9 @@ def process_text_files(input_directory: str, output_directory: str):
                 with open(output_file_path, "w", encoding="utf-8") as outfile:
                     for sentence in processed_sentences:
                         outfile.write(sentence + "\n")
-                message = f"Processed file: {file_name} -> {output_file_path}"
-                logging.info(message)
-                logging.info(message)
+                logging.info(f"Processed file: {file_name} -> {output_file_path}")
             else:
-                message = f"Processed file: {file_name} -> No data to write."
-                logging.info(message)
-                logging.info(message)
+                logging.info(f"Processed file: {file_name} -> No data to write.")
 
 
 def process_xml_file(input_file_path: str, output_file_path: str):
@@ -232,36 +204,47 @@ def process_xml_file(input_file_path: str, output_file_path: str):
         output_file_path (str): Path where the processed text file will be saved.
     """
     logging.info(f"Starting process_xml_file: {input_file_path} -> {output_file_path}")
-    with open(output_file_path, "w", encoding="utf-8") as output_file:
-        context = ET.iterparse(input_file_path, events=("start", "end"))
-        sentence_buffer = []
-        for event, elem in context:
-            if event == "end" and elem.tag.endswith("text"):
-                text_content = elem.text or ""
-                for line in text_content.splitlines():
-                    line = line.strip()
-                    # Extract Arabic words from the line
-                    arabic_words = re.findall(r'[ء-ي]+', line)
-                    arabic_line = " ".join(arabic_words)
+    # Skip empty or missing files
+    try:
+        if not os.path.exists(input_file_path) or os.path.getsize(input_file_path) == 0:
+            logging.warning(f"Skipping XML file (empty or missing): {input_file_path}")
+            return
+    except Exception:
+        logging.warning(f"Skipping XML file (stat failed): {input_file_path}")
+        return
 
-                    if arabic_line:
-                        sentence_buffer.append(arabic_line)
-                    else:
-                        if sentence_buffer:
-                            full_sentence = clean_text(" ".join(sentence_buffer))
-                            # Normalize the sentence to remove extra tatweel characters
-                            normalized_sentence = normalize_arabic_word(full_sentence)
-                            if len(normalized_sentence.split()) >= 100:
-                                output_file.write(normalized_sentence + "\n")
-                            sentence_buffer = []
-                if sentence_buffer:
-                    full_sentence = clean_text(" ".join(sentence_buffer))
-                    normalized_sentence = normalize_arabic_word(full_sentence)
-                    if len(normalized_sentence.split()) >= 100:
-                        output_file.write(normalized_sentence + "\n")
-                    sentence_buffer = []
-                elem.clear()
-    logging.info(f"Completed process_xml_file: {input_file_path}")
+    try:
+        with open(output_file_path, "w", encoding="utf-8") as output_file:
+            context = ET.iterparse(input_file_path, events=("start", "end"))
+            sentence_buffer = []
+            for event, elem in context:
+                if event == "end" and elem.tag.endswith("text"):
+                    text_content = elem.text or ""
+                    for line in text_content.splitlines():
+                        line = line.strip()
+                        arabic_words = re.findall(r'[ء-ي]+', line)
+                        arabic_line = " ".join(arabic_words)
+
+                        if arabic_line:
+                            sentence_buffer.append(arabic_line)
+                        else:
+                            if sentence_buffer:
+                                full_sentence = clean_text(" ".join(sentence_buffer))
+                                normalized_sentence = normalize_arabic_word(full_sentence)
+                                if len(normalized_sentence.split()) >= 100:
+                                    output_file.write(normalized_sentence + "\n")
+                                sentence_buffer = []
+                    if sentence_buffer:
+                        full_sentence = clean_text(" ".join(sentence_buffer))
+                        normalized_sentence = normalize_arabic_word(full_sentence)
+                        if len(normalized_sentence.split()) >= 100:
+                            output_file.write(normalized_sentence + "\n")
+                        sentence_buffer = []
+                    elem.clear()
+        logging.info(f"Completed process_xml_file: {input_file_path}")
+    except ET.ParseError as e:
+        logging.error(f"Skipping malformed XML file: {input_file_path} (ParseError: {e})")
+        return
 
 
 def process_xml(input_directory: str, output_directory: str):
@@ -281,7 +264,11 @@ def process_xml(input_directory: str, output_directory: str):
             base_name = os.path.splitext(file_name)[0]
             output_file_name = f"processed_{base_name}.txt"
             output_file_path = os.path.join(output_directory, output_file_name)
-            process_xml_file(input_file_path, output_file_path)
+            try:
+                process_xml_file(input_file_path, output_file_path)
+            except Exception as e:
+                logging.error(f"Failed processing XML file {input_file_path}: {e}")
+                continue
     logging.info(f"Completed process_directory from {input_directory}")
 
 
@@ -355,37 +342,33 @@ def apply_segmentation_to_file(
                 f"Segmented batch {chunk_number} with {len(segmented_lines)} lines to {output_file}\n"
             )
             logging.info(chunk_msg)
-            logging.info(chunk_msg)
             chunk_number += 1
 
     logging.info(f"Completed segmentation for file: {input_file}")
 
 
-def segment_data(output_directory: str, batch_size: int = 1000):
+def segment_data(input_directory: str, output_directory: str, batch_size: int = 1000):
     """
-    Process all text files in the specified directory that start with 'processed_' and end with '.txt',
-    applying Farasa segmentation in batches and writing the segmented output to new files.
+    Segment processed text files from input_directory into output_directory.
 
     Args:
-        output_directory (str): Directory containing processed text files to segment.
+        input_directory (str): Directory containing processed text files (prefixed with 'processed_').
+        output_directory (str): Directory to write segmented outputs into.
         batch_size (int, optional): Number of lines to process per batch. Defaults to 1000.
     """
-    logging.info(f"Starting Segmenting_data in directory: {output_directory}")
+    logging.info(f"Starting Segmenting_data from {input_directory} to {output_directory}")
+    os.makedirs(output_directory, exist_ok=True)
     farasa_segmenter = FarasaSegmenter(interactive=True)
     file_number = 1
-    for file_name in os.listdir(output_directory):
+    for file_name in os.listdir(input_directory):
         if file_name.startswith("processed_") and file_name.endswith(".txt"):
-            input_file_path = os.path.join(output_directory, file_name)
+            input_file_path = os.path.join(input_directory, file_name)
             output_base = os.path.join(output_directory, f"segmented_{file_number}")
             file_number += 1
-            debug_msg = f"\nDEBUG: Processing segmentation for file: {file_name}"
-            logging.info(debug_msg)
-            logging.info(debug_msg)
+            logging.info(f"\nProcessing segmentation for file: {file_name}")
             apply_segmentation_to_file(input_file_path, output_base, farasa_segmenter, batch_size=batch_size)
-            completion_msg = f"DEBUG: Completed segmentation for file: {file_name}"
-            logging.info(completion_msg)
-            logging.info(completion_msg)
-    logging.info(f"Completed Segmenting_data in directory: {output_directory}")
+            logging.info(f"\nCompleted segmentation for file: {file_name}")
+    logging.info(f"Completed Segmenting_data to directory: {output_directory}")
 
 
 def split_data(
@@ -464,76 +447,3 @@ def split_data(
     logging.info(f"  Test: {len(test_lines)} lines ({len(test_lines)/total_lines*100:.1f}%)")
 
     return train_dir, val_dir, test_dir
-
-
-if __name__ == "__main__":
-    # Example usage
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Preprocess Arabic text data")
-    parser.add_argument(
-        "--input-dir",
-        type=str,
-        required=True,
-        help="Directory containing raw text/XML files"
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=str,
-        required=True,
-        help="Directory to save processed files"
-    )
-    parser.add_argument(
-        "--process-xml",
-        action="store_true",
-        help="Process XML files"
-    )
-    parser.add_argument(
-        "--process-text",
-        action="store_true",
-        help="Process text files"
-    )
-    parser.add_argument(
-        "--segment",
-        action="store_true",
-        help="Apply Farasa segmentation"
-    )
-    parser.add_argument(
-        "--split",
-        action="store_true",
-        help="Split data into train/val/test"
-    )
-    parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=1000,
-        help="Batch size for segmentation (default: 1000)"
-    )
-
-    args = parser.parse_args()
-
-    # Initialize logging
-    setup_logging(level=logging.INFO, log_file="data_preprocessing.log")
-
-    # Process XML files
-    if args.process_xml:
-        logging.info("Processing XML files...")
-        process_xml(args.input_dir, args.output_dir)
-
-    # Process text files
-    if args.process_text:
-        logging.info("Processing text files...")
-        process_text_files(args.input_dir, args.output_dir)
-
-    # Apply segmentation
-    if args.segment:
-        logging.info("Applying Farasa segmentation...")
-        segment_data(args.output_dir, batch_size=args.batch_size)
-
-    # Split data
-    if args.split:
-        logging.info("Splitting data into train/val/test...")
-        split_data(args.output_dir, "./data/processed")
-
-    logging.info("\nPreprocessing complete! Check data_preprocessing.log for details.")
-
