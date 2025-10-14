@@ -9,23 +9,34 @@
 #
 # Examples:
 #   # Run NER benchmark with ModernAraBERT
-#   ./scripts/benchmarking/run_ner_benchmark.sh modernbert ./results/ner
+#   ./scripts/benchmarking/run_ner_benchmark.sh modernarabert ./results/ner
 #
-#   # Run with other models
+#   # Run with other models (allowed values only)
 #   ./scripts/benchmarking/run_ner_benchmark.sh arabert ./results/ner_arabert
 #   ./scripts/benchmarking/run_ner_benchmark.sh mbert ./results/ner_mbert
 #
 #   # Compare multiple models
-#   for model in modernbert arabert mbert arabert2 marbert camel; do
+#   for model in modernarabert arabert mbert arabert2 marbert camel; do
 #       ./scripts/benchmarking/run_ner_benchmark.sh "$model" "./results/ner_$model"
 #   done
 
 set -e  # Exit on error
 
 # Default values
-MODEL_NAME="${1:-modernbert}"
+MODEL_NAME="${1:-modernarabert}"
 OUTPUT_DIR="${2:-./results/ner}"
 DATASET_NAME="${3:-asas-ai/ANERCorp}"
+
+# Validate model name against allowed choices
+case "$MODEL_NAME" in
+    modernarabert|arabert|mbert|arabert2|marbert|camel)
+        ;;
+    *)
+        echo -e "${RED}Invalid model: $MODEL_NAME${NC}"
+        echo "Allowed models: modernarabert, arabert, mbert, arabert2, marbert, camel"
+        exit 1
+        ;;
+esac
 
 # Get script directory
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -41,7 +52,7 @@ echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}ModernAraBERT NER Benchmark${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo "Model: $MODEL_NAME"
-echo "Dataset: $DATASET_NAME (will be downloaded from HuggingFace)"
+echo "Dataset: $DATASET_NAME"
 echo "Output: $OUTPUT_DIR"
 echo -e "${BLUE}========================================${NC}"
 
