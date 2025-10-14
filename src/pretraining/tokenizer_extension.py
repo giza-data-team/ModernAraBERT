@@ -257,7 +257,7 @@ def run_tokenizer_extension(
     min_freq: int = 20,
     max_vocab_size: int = 80000,
     log_file: str = "tokenization.log"
-) -> Dict[str, any]:
+) -> Dict[str, Any]:
     """
     Main pipeline for extending tokenizer vocabulary with Arabic tokens.
     
@@ -277,7 +277,6 @@ def run_tokenizer_extension(
             - model_path: Path to saved model
     """
     # Setup
-    setup_logging(log_file)
     logging.info("="*80)
     logging.info("Starting tokenizer extension pipeline")
     logging.info(f"Model: {model_name}")
@@ -324,6 +323,39 @@ def run_tokenizer_extension(
         'tokenizer_path': tokenizer_path,
         'model_path': model_path
     }
+
+
+def extend_tokenizer_pipeline(
+    model_name: str,
+    text_dir: str,
+    output_dir: str,
+    min_freq: int = 20,
+    max_vocab_size: int = 80000,
+    log_level: int = logging.INFO,
+) -> Tuple[PreTrainedTokenizer, AutoModelForMaskedLM]:
+    """
+    Adapter providing the API expected by scripts. Runs the analysis and extension and
+    returns the in-memory tokenizer and model with resized embeddings.
+    """
+    input_dirs = {"train": text_dir}
+
+    text_gen = text_generator(input_dirs)
+    _, _, _, common_words = analyze_vocab_distribution(
+        text_gen,
+        min_freq=min_freq,
+        max_vocab_size=max_vocab_size,
+    )
+
+    tokenizer, _ = extend_tokenizer_vocabulary(
+        model_name=model_name,
+        vocab_tokens=common_words,
+        output_tokenizer_path=os.path.join(output_dir, "Tokenizer"),
+        output_model_path=os.path.join(output_dir, "Model"),
+    )
+
+    # Load model that has been saved with resized embeddings
+    model = AutoModelForMaskedLM.from_pretrained(os.path.join(output_dir, "Model"))
+    return tokenizer, model
 
 
 if __name__ == "__main__":
@@ -390,7 +422,7 @@ if __name__ == "__main__":
     print("\n" + "="*80)
     print("TOKENIZER EXTENSION COMPLETE")
     print("="*80)
-    print(f"Vocabulary Statistics:")
+    print("Vocabulary Statistics:")
     for key, value in results['vocab_stats'].items():
         print(f"  {key}: {value:,}")
     print(f"\nTokens Added: {results['num_added_tokens']:,}")
