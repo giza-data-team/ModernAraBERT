@@ -8,9 +8,6 @@ This module provides the main benchmarking orchestrator for evaluating models on
 - Comprehensive evaluation with Macro-F1, loss, and perplexity
 - Memory usage tracking
 - Result logging and JSON export
-
-Original file: "sa_benchmarking.py"
-Status: Logic unchanged, improved modularity and imports
 """
 
 import os
@@ -20,9 +17,8 @@ import json
 import numpy as np
 import torch
 import torch.nn as nn
-import psutil
 from datetime import datetime
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
 from torch.utils.data import DataLoader
 from transformers import (
     AutoTokenizer,
@@ -32,10 +28,10 @@ from transformers import (
 
 # Import from local modules
 from .datasets import (
-    DATASET_CONFIGS,
     load_sentiment_dataset,
 )
 from .train import train_model, evaluate_model
+from src.utils.memory import get_memory_usage
 
 
 # Suppress tokenizers parallelism warning
@@ -43,7 +39,7 @@ os.environ.setdefault('TOKENIZERS_PARALLELISM', 'false')
 
 
 # Model configurations
-MODEL_CONFIGS = {
+MODEL_PATHS = {
     "modernarabert": {
         "path": "gizadatateam/ModernAraBERT",
         "tokenizer_path": "gizadatateam/ModernAraBERT"
@@ -65,89 +61,6 @@ MODEL_CONFIGS = {
         "tokenizer_path": "UBC-NLP/MARBERTv2"
     },
 }
-
-
-def setup_logging(model_name: str, dataset_name: str, epochs: int, patience: int, log_dir: str = "./logs") -> Tuple[logging.Logger, str]:
-    """
-    Configure logging for benchmarking.
-
-    Args:
-        model_name (str): Model identifier
-        dataset_name (str): Dataset name
-        epochs (int): Number of epochs
-        patience (int): Early stopping patience
-        log_dir (str): Directory for log files
-
-    Returns:
-        tuple: (logger instance, log file path)
-    """
-    os.makedirs(log_dir, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_filename = f"SA_Benchmark_{model_name}_{dataset_name}_{epochs}ep_p{patience}_{timestamp}.log"
-    log_filepath = os.path.join(log_dir, log_filename)
-    
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        handlers=[logging.StreamHandler(), logging.FileHandler(log_filepath)],
-        force=True,
-    )
-    
-    logger = logging.getLogger(__name__)
-    logger.info(f"Starting benchmarking for model {model_name} on dataset {dataset_name}")
-    logger.info(f"Configuration: epochs={epochs}, patience={patience}")
-    print(f"Logging to {log_filepath}")
-    
-    return logger, log_filepath
-
-
-def get_memory_usage() -> Dict[str, float]:
-    """
-    Get current RAM and VRAM usage statistics.
-    
-    Returns:
-        Dict containing memory usage information:
-            - ram_used_gb: RAM currently in use (GB)
-            - ram_percent: Percentage of total RAM in use
-            - vram_used_gb: VRAM currently in use (GB)
-            - vram_total_gb: Total VRAM available (GB)
-            - vram_percent: Percentage of VRAM in use
-    """
-    memory_stats = {}
-    
-    # Get RAM usage
-    process = psutil.Process(os.getpid())
-    ram_used_bytes = process.memory_info().rss  # Resident Set Size
-    ram_used_gb = ram_used_bytes / (1024 ** 3)
-    memory_stats["ram_used_gb"] = ram_used_gb
-    memory_stats["ram_percent"] = psutil.virtual_memory().percent
-    
-    # Get VRAM usage if CUDA is available
-    if torch.cuda.is_available():
-        try:
-            torch.cuda.synchronize()
-            vram_used_bytes = torch.cuda.memory_allocated()
-            vram_total_bytes = torch.cuda.get_device_properties(0).total_memory
-            
-            vram_used_gb = vram_used_bytes / (1024 ** 3)
-            vram_total_gb = vram_total_bytes / (1024 ** 3)
-            vram_percent = (vram_used_bytes / vram_total_bytes) * 100
-            
-            memory_stats["vram_used_gb"] = vram_used_gb
-            memory_stats["vram_total_gb"] = vram_total_gb
-            memory_stats["vram_percent"] = vram_percent
-        except Exception as e:
-            logging.warning(f"Could not get VRAM usage: {e}")
-            memory_stats["vram_used_gb"] = 0.0
-            memory_stats["vram_total_gb"] = 0.0
-            memory_stats["vram_percent"] = 0.0
-    else:
-        memory_stats["vram_used_gb"] = 0.0
-        memory_stats["vram_total_gb"] = 0.0
-        memory_stats["vram_percent"] = 0.0
-    
-    return memory_stats
-
 
 def set_seed(seed: int = 42):
     """Set random seeds for reproducibility."""
@@ -177,6 +90,7 @@ def run_sa_benchmark(
     save_every: Optional[int] = None,
     hf_token: Optional[str] = None,
     log_dir: str = "./logs",
+    results_dir: str = "./results/sa",
     seed: int = 42
 ) -> Dict:
     """
@@ -201,15 +115,18 @@ def run_sa_benchmark(
         save_every (int): Save checkpoint every N epochs
         hf_token (str): HuggingFace token for private models
         log_dir (str): Directory for logs
+        results_dir (str): Directory for saving results (default: ./results/sa)
         seed (int): Random seed (default: 42)
 
     Returns:
         dict: Benchmark results including metrics and configuration
     """
     # Setup
-    logger, log_filepath = setup_logging(model_name, dataset_name, epochs, patience, log_dir)
+    logger = logging.getLogger(__name__)
     set_seed(seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    logger.info(f"Starting benchmarking for model {model_name} on dataset {dataset_name}")
+    logger.info(f"Configuration: epochs={epochs}, patience={patience}")
     logger.info(f"Using device: {device}")
     
     # Load tokenizer
@@ -350,18 +267,18 @@ def run_sa_benchmark(
     logger.info(f"{model_name} Classification Report:\n{report}")
     logger.info(f"{model_name} Average Eval Loss: {avg_eval_loss:.4f} | Perplexity: {perplexity:.4f}")
     
-    print(f"\n{model_name} Evaluation Results:")
-    print(f"  Macro-F1: {macro_f1:.4f}")
-    print(f"  Average Loss: {avg_eval_loss:.4f}")
-    print(f"  Perplexity: {perplexity:.4f}")
-    print(f"\nClassification Report:")
-    print(report)
+    logger.info(f"\n{model_name} Evaluation Results:")
+    logger.info(f"  Macro-F1: {macro_f1:.4f}")
+    logger.info(f"  Average Loss: {avg_eval_loss:.4f}")
+    logger.info(f"  Perplexity: {perplexity:.4f}")
+    logger.info("\nClassification Report:")
+    logger.info(report)
     
-    # Print sample predictions
-    print(f"\nSample predictions (first 10):")
-    print(f"{'Index':<6}{'Ground Truth':<15}{'Prediction':<15}{'Confidence':<12}")
+    # Log sample predictions
+    logger.info("\nSample predictions (first 10):")
+    logger.info(f"{'Index':<6}{'Ground Truth':<15}{'Prediction':<15}{'Confidence':<12}")
     for i in range(min(10, len(true_labels))):
-        print(f"{i:<6}{true_labels[i]:<15}{preds[i]:<15}{confidences[i]:<12.4f}")
+        logger.info(f"{i:<6}{true_labels[i]:<15}{preds[i]:<15}{confidences[i]:<12.4f}")
     
     # Save final checkpoint if requested
     if checkpoint_path is not None:
@@ -411,29 +328,27 @@ def run_sa_benchmark(
     }
     
     # Save results to JSON
-    result_filepath = log_filepath.replace('.log', '_results.json')
+    os.makedirs(results_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    result_filename = f"sa_benchmark_{model_name}_{dataset_name}_{epochs}ep_p{patience}_{timestamp}_results.json"
+    result_filepath = os.path.join(results_dir, result_filename)
     with open(result_filepath, 'w') as f:
         json.dump(results, f, indent=2)
     
     logger.info(f"Results saved to {result_filepath}")
-    print(f"\nDetailed results saved to {result_filepath}")
+    logger.info(f"Detailed results saved to {result_filepath}")
     
-    # Print summary
-    print("\nBenchmarking Complete!")
-    print(f"  Model: {model_name}")
-    print(f"  Dataset: {dataset_name}")
-    print(f"  Macro-F1: {macro_f1:.4f}")
-    print(f"  Perplexity: {perplexity:.4f}")
-    print(f"\nHardware Usage:")
-    print(f"  Initial RAM: {initial_memory['ram_used_gb']:.2f} GB ({initial_memory['ram_percent']:.1f}%)")
-    print(f"  Final RAM: {final_memory['ram_used_gb']:.2f} GB ({final_memory['ram_percent']:.1f}%)")
+    # Log summary
+    logger.info("\nBenchmarking Complete!")
+    logger.info(f"  Model: {model_name}")
+    logger.info(f"  Dataset: {dataset_name}")
+    logger.info(f"  Macro-F1: {macro_f1:.4f}")
+    logger.info(f"  Perplexity: {perplexity:.4f}")
+    logger.info("\nHardware Usage:")
+    logger.info(f"  Initial RAM: {initial_memory['ram_used_gb']:.2f} GB ({initial_memory['ram_percent']:.1f}%)")
+    logger.info(f"  Final RAM: {final_memory['ram_used_gb']:.2f} GB ({final_memory['ram_percent']:.1f}%)")
     if torch.cuda.is_available():
-        print(f"  Initial VRAM: {initial_memory['vram_used_gb']:.2f} GB ({initial_memory['vram_percent']:.1f}%)")
-        print(f"  Final VRAM: {final_memory['vram_used_gb']:.2f} GB ({final_memory['vram_percent']:.1f}%)")
+        logger.info(f"  Initial VRAM: {initial_memory['vram_used_gb']:.2f} GB ({initial_memory['vram_percent']:.1f}%)")
+        logger.info(f"  Final VRAM: {final_memory['vram_used_gb']:.2f} GB ({final_memory['vram_percent']:.1f}%)")
     
     return results
-
-
-# Note: This module is now used as a library by run_sa_benchmark.py
-# For direct usage, use: python scripts/benchmarking/run_sa_benchmark.py
-

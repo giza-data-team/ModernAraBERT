@@ -7,13 +7,6 @@ from sklearn.metrics import accuracy_score, classification_report
 import os
 from tqdm import tqdm  
 
-logging.basicConfig(
-    filename="SA_Benchmarking.log",
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    force=True
-)
-
 def train_model(model, train_dataloader, val_dataloader=None, device=None, num_epochs=3, learning_rate=2e-5,
                 patience=2, checkpoint_path=None, continue_from_checkpoint=False, save_every=None):
     optimizer = AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=learning_rate, betas=(0.9, 0.95), weight_decay=0.01)

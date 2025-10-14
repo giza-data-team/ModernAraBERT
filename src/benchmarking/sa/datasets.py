@@ -14,7 +14,6 @@ Provides functions for:
 """
 
 import os
-import sys
 import logging
 import csv
 import torch
@@ -227,7 +226,7 @@ def prepare_astd_benchmark(data_dir: str, astd_info: Dict[str, str]):
     val_df = pd.merge(val_ids, main_df, on="id", how="left")
     val_df.to_csv(os.path.join(data_dir, "validation.txt"), sep="\t", index=False, header=False)
     
-    print(f"ASTD benchmark files prepared in {data_dir}")
+    logging.info(f"ASTD benchmark files prepared in {data_dir}")
     logging.info(f"ASTD: Train={len(train_df)}, Test={len(test_df)}, Val={len(val_df)}")
 
 
@@ -266,17 +265,17 @@ def prepare_labr_benchmark(data_dir: str, labr_info: Dict[str, str]) -> bool:
         main_df["text"] = main_df["review"].astype(str).str.strip()
         main_df = main_df[["id", "text", "label"]]
         
-        print("Sample main file IDs (index-based):", main_df["id"].head(5).tolist())
+        logging.info("Sample main file IDs (index-based): %s", main_df["id"].head(5).tolist())
         
         # Load train IDs and merge
         train_ids = pd.read_csv(labr_info["benchmark_train"], header=None, names=["id"], dtype=str)
         train_ids["id"] = train_ids["id"].astype(str).str.strip()
-        print("Sample benchmark train IDs:", train_ids["id"].head(5).tolist())
+        logging.info("Sample benchmark train IDs: %s", train_ids["id"].head(5).tolist())
         
         # Load test IDs and merge
         test_ids = pd.read_csv(labr_info["benchmark_test"], header=None, names=["id"], dtype=str)
         test_ids["id"] = test_ids["id"].astype(str).str.strip()
-        print("Sample benchmark test IDs:", test_ids["id"].head(5).tolist())
+        logging.info("Sample benchmark test IDs: %s", test_ids["id"].head(5).tolist())
         
         train_df = pd.merge(train_ids, main_df, on="id", how="inner")
         test_df = pd.merge(test_ids, main_df, on="id", how="inner")
@@ -288,15 +287,14 @@ def prepare_labr_benchmark(data_dir: str, labr_info: Dict[str, str]) -> bool:
         train_df.to_csv(train_path, sep="\t", index=False, header=False)
         test_df.to_csv(test_path, sep="\t", index=False, header=False)
         
-        print(f"LABR benchmark files prepared in {data_dir}")
-        print(f"Train file: {train_path} (rows: {len(train_df)})")
-        print(f"Test file: {test_path} (rows: {len(test_df)})")
+        logging.info(f"LABR benchmark files prepared in {data_dir}")
+        logging.info(f"Train file: {train_path} (rows: {len(train_df)})")
+        logging.info(f"Test file: {test_path} (rows: {len(test_df)})")
         logging.info(f"LABR: Train={len(train_df)}, Test={len(test_df)}")
         
         return True
         
     except Exception as e:
-        print(f"Error preparing LABR dataset: {str(e)}")
         logging.error(f"Error preparing LABR dataset: {str(e)}")
         return False
 
@@ -316,13 +314,13 @@ def prepare_ajgt_benchmark(data_dir: str, ajgt_info: Dict[str, str]) -> bool:
         os.makedirs(data_dir, exist_ok=True)
         
         # Download XLSX from GitHub
-        print(f"Downloading AJGT dataset from {ajgt_info['url']}")
+        logging.info(f"Downloading AJGT dataset from {ajgt_info['url']}")
         main_df = pd.read_excel(ajgt_info["url"], engine='openpyxl')
         
         # Verify expected columns
         expected_columns = ["ID", "Feed", "Sentiment"]
         if not all(col in main_df.columns for col in expected_columns):
-            print(f"Error: Expected columns {expected_columns}, got {list(main_df.columns)}")
+            logging.error(f"Error: Expected columns {expected_columns}, got {list(main_df.columns)}")
             return False
         
         # Map sentiment labels
@@ -342,7 +340,7 @@ def prepare_ajgt_benchmark(data_dir: str, ajgt_info: Dict[str, str]) -> bool:
         main_df["text"] = main_df["Feed"].astype(str).str.strip()
         main_df = main_df[["id", "text", "label"]]
         
-        print(f"Loaded {len(main_df)} samples from AJGT dataset")
+        logging.info(f"Loaded {len(main_df)} samples from AJGT dataset")
         
         # Split into train/test/validation (60/20/20)
         from sklearn.model_selection import train_test_split
@@ -359,20 +357,14 @@ def prepare_ajgt_benchmark(data_dir: str, ajgt_info: Dict[str, str]) -> bool:
         test_df.to_csv(test_path, sep="\t", index=False, header=False)
         val_df.to_csv(val_path, sep="\t", index=False, header=False)
         
-        print(f"AJGT benchmark files prepared in {data_dir}")
-        print(f"Train file: {train_path} (rows: {len(train_df)})")
-        print(f"Test file: {test_path} (rows: {len(test_df)})")
-        print(f"Validation file: {val_path} (rows: {len(val_df)})")
+        logging.info(f"AJGT benchmark files prepared in {data_dir}")
+        logging.info(f"Train file: {train_path} (rows: {len(train_df)})")
+        logging.info(f"Test file: {test_path} (rows: {len(test_df)})")
+        logging.info(f"Validation file: {val_path} (rows: {len(val_df)})")
         logging.info(f"AJGT: Train={len(train_df)}, Test={len(test_df)}, Val={len(val_df)}")
         
         return True
         
     except Exception as e:
-        print(f"Error preparing AJGT dataset: {str(e)}")
         logging.error(f"Error preparing AJGT dataset: {str(e)}")
         return False
-
-
-# Note: This module is now used as a library by run_sa_benchmark.py
-# For direct usage, use: python scripts/benchmarking/run_sa_benchmark.py
-

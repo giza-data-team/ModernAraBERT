@@ -86,7 +86,7 @@ def process_dataset(dataset: Dataset, window_size: int, base_dir: str) -> bool:
         bool: True on success, False on failure
     """
     try:
-        print("Processing and segmenting texts...")
+        logging.info("Processing and segmenting texts...")
         processed_texts = []
         processed_ids = []
         processed_labels = []
@@ -107,7 +107,7 @@ def process_dataset(dataset: Dataset, window_size: int, base_dir: str) -> bool:
                     processed_ids.append(doc_id)
                     processed_labels.append(label)
 
-        print(f"Total processed chunks: {len(processed_texts)}")
+        logging.info(f"Total processed chunks: {len(processed_texts)}")
         
         # Create dataset from processed data
         final_dataset = Dataset.from_dict({
@@ -127,7 +127,7 @@ def process_dataset(dataset: Dataset, window_size: int, base_dir: str) -> bool:
         })
         
         # Save to TSV files
-        print("Saving dataset to TXT files...")
+        logging.info("Saving dataset to TXT files...")
         os.makedirs(base_dir, exist_ok=True)
         
         for split in ["train", "test", "validation"]:
@@ -139,10 +139,10 @@ def process_dataset(dataset: Dataset, window_size: int, base_dir: str) -> bool:
                     else:
                         text_line = f"{example['id']}\t{example['text']}"
                     f.write(text_line + "\n")
-            print(f"Saved {split} split to {file_path}")
+            logging.info(f"Saved {split} split to {file_path}")
         
-        print("Dataset segmentation and splitting complete.")
-        print("Files saved: train.txt, test.txt, validation.txt")
+        logging.info("Dataset segmentation and splitting complete.")
+        logging.info("Files saved: train.txt, test.txt, validation.txt")
         
         # Log statistics
         logging.info("Dataset processing complete:")
@@ -153,11 +153,5 @@ def process_dataset(dataset: Dataset, window_size: int, base_dir: str) -> bool:
         return True
         
     except Exception as e:
-        print(f"Error processing dataset: {str(e)}")
         logging.error(f"Error processing dataset: {str(e)}")
         return False
-
-
-# Note: This module is now used as a library by run_sa_benchmark.py
-# For direct usage, use: python scripts/benchmarking/run_sa_benchmark.py
-
