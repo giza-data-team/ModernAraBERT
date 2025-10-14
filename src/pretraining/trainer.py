@@ -25,11 +25,9 @@ import torch
 from torch.utils.data import DataLoader, IterableDataset, get_worker_info
 from datetime import datetime
 from tqdm import tqdm
-from typing import Tuple, Optional, Dict, Any
-from pathlib import Path
+from typing import Tuple, Optional
 from transformers import (
     AutoModelForMaskedLM,
-    AutoTokenizer,
     PreTrainedTokenizer,
     PreTrainedModel,
     get_cosine_schedule_with_warmup,
@@ -752,109 +750,3 @@ def demo_fill_mask(model_path: str, tokenizer: PreTrainedTokenizer, logger: logg
             print(f"Prediction: {result['sequence']} (Score: {result['score']:.4f})")
     except Exception as e:
         print(f"Demo error: {e}")
-
-
-if __name__ == "__main__":
-    import argparse
-    
-    parser = argparse.ArgumentParser(description="Train ModernAraBERT with MLM objective")
-    
-    # Required arguments
-    parser.add_argument("--train-dir", type=str, required=True, help="Directory containing training text files")
-    parser.add_argument("--val-dir", type=str, required=True, help="Directory containing validation text files")
-    parser.add_argument("--tokenizer-path", type=str, required=True, help="Path to extended tokenizer")
-    parser.add_argument("--model-path", type=str, required=True, help="Path to model with resized embeddings")
-    parser.add_argument("--output-dir", type=str, required=True, help="Output directory for checkpoints")
-    
-    # Training hyperparameters
-    parser.add_argument("--epochs", type=int, default=3, help="Number of training epochs (default: 3)")
-    parser.add_argument("--batch-size", type=int, default=32, help="Per-GPU batch size (default: 32)")
-    parser.add_argument("--learning-rate", type=float, default=5e-7, help="Learning rate (default: 5e-7)")
-    parser.add_argument("--max-length", type=int, default=512, help="Maximum sequence length (default: 512)")
-    parser.add_argument("--grad-acc-steps", type=int, default=2, help="Gradient accumulation steps (default: 2)")
-    parser.add_argument("--num-workers", type=int, default=4, help="Number of data loader workers (default: 4)")
-    parser.add_argument("--save-checkpoint-steps", type=int, default=10000, help="Save checkpoint every N steps (default: 10000)")
-    parser.add_argument("--warmup-ratio", type=float, default=0.001, help="Warmup ratio (default: 0.001)")
-    parser.add_argument("--last-step", type=int, default=0, help="Last completed step for resuming (default: 0)")
-    parser.add_argument("--logging-steps", type=int, default=100, help="Log every N steps (default: 100)")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed (default: 42)")
-    
-    # Performance options
-    parser.add_argument("--no-fp16", action="store_true", help="Disable mixed precision training")
-    parser.add_argument("--no-torch-compile", action="store_true", help="Disable torch.compile")
-    parser.add_argument("--log-file", type=str, default="training.log", help="Log file path (default: training.log)")
-    parser.add_argument("--run-demo", action="store_true", help="Run fill-mask demo after training")
-    
-    args = parser.parse_args()
-    
-    # Setup
-    logger = setup_training_logging(args.log_file)
-    setup_performance_optimizations(logger)
-    
-    # Log configuration
-    logger.info("="*80)
-    logger.info("ModernAraBERT Training Configuration")
-    logger.info("="*80)
-    for arg, value in vars(args).items():
-        logger.info(f"{arg}: {value}")
-    logger.info("="*80)
-    
-    # Configure thread settings
-    if torch.get_num_threads() > args.num_workers * 2:
-        torch.set_num_threads(args.num_workers * 2)
-        logger.info(f"Set PyTorch threads to {args.num_workers * 2} for better CPU efficiency")
-    
-    # Clear memory
-    torch.cuda.empty_cache()
-    gc.collect()
-    
-    # Log device information
-    if torch.cuda.is_available():
-        device_count = torch.cuda.device_count()
-        logger.info(f"Found {device_count} CUDA devices")
-        for i in range(device_count):
-            props = torch.cuda.get_device_properties(i)
-            logger.info(f"CUDA Device {i}: {props.name}, Compute: {props.major}.{props.minor}, "
-                      f"Memory: {props.total_memory/1e9:.2f} GB")
-    
-    # Load tokenizer
-    logger.info(f"Loading tokenizer from {args.tokenizer_path}")
-    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path, local_files_only=True)
-    
-    # Clear memory before training
-    torch.cuda.empty_cache()
-    gc.collect()
-    
-    # Train model
-    trained_model_path = train_model(
-        tokenizer=tokenizer,
-        train_dir=args.train_dir,
-        val_dir=args.val_dir,
-        model_path=args.model_path,
-        output_dir=args.output_dir,
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        learning_rate=args.learning_rate,
-        max_length=args.max_length,
-        grad_acc_steps=args.grad_acc_steps,
-        num_workers=args.num_workers,
-        save_checkpoint_steps=args.save_checkpoint_steps,
-        warmup_ratio=args.warmup_ratio,
-        last_step=args.last_step,
-        fp16=not args.no_fp16,
-        logging_steps=args.logging_steps,
-        use_torch_compile=not args.no_torch_compile,
-        seed=args.seed,
-        logger=logger
-    )
-    
-    # Clear memory after training
-    torch.cuda.empty_cache()
-    gc.collect()
-    
-    # Run demo if requested
-    if args.run_demo and Accelerator().is_local_main_process:
-        demo_fill_mask(os.path.join(trained_model_path, "final_model"), tokenizer, logger)
-    
-    logger.info("Training pipeline completed successfully!")
-
