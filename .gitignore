@@ -151,3 +151,6 @@ results/*.txt
 
 # Models
 models/
+
+# Results
+results/
