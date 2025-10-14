@@ -43,7 +43,7 @@ conda_env/
 # Data directories
 data/raw/
 data/interim/
-data/processed/
+data/preprocessed/
 data/external/
 datasets/
 *.tar.gz
