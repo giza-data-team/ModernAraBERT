@@ -22,12 +22,10 @@ Usage Examples:
     # Analyze vocabulary without extending
     python scripts/pretraining/run_tokenizer_extension.py \\
         --model-name answerdotai/ModernBERT-base \\
-        --input-dir data/processed/segmented \\
-        --analyze-only
+        --input-dir data/processed/segmented
 """
 
 import sys
-import os
 from pathlib import Path
 import argparse
 import logging
@@ -38,7 +36,6 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from src.pretraining.tokenizer_extension import extend_tokenizer_pipeline
 from src.utils.logging import setup_logging
-)
 
 
 def parse_args():
@@ -58,14 +55,16 @@ def parse_args():
     parser.add_argument(
         '--input-dir',
         type=str,
-        required=True,
+        required=False,
+        default=str(REPO_ROOT / 'data' / 'preprocessed' / 'segmented'),
         help='Directory containing preprocessed Arabic text files'
     )
     
     parser.add_argument(
         '--output-dir',
         type=str,
-        default=str(REPO_ROOT / 'models' / 'modernarabert_extended'),
+        required=False,
+        default=str(REPO_ROOT / 'models' / 'modernarabert_tokenizer'),
         help='Directory to save extended tokenizer and model'
     )
     
@@ -84,12 +83,6 @@ def parse_args():
     )
     
     parser.add_argument(
-        '--analyze-only',
-        action='store_true',
-        help='Only analyze vocabulary without extending tokenizer'
-    )
-    
-    parser.add_argument(
         '--log-level',
         type=str,
         default='INFO',
@@ -105,7 +98,7 @@ def main():
     args = parse_args()
     
     # Setup logging
-    setup_logging(level=getattr(logging, args.log_level))
+    setup_logging(level=getattr(logging, args.log_level), log_file="tokenizer_extension.log")
     logger = logging.getLogger(__name__)
     
     # Validate inputs
@@ -130,21 +123,11 @@ def main():
     logger.info(f"Max new tokens: {args.max_vocab_size:,}")
     logger.info(f"Min frequency: {args.min_freq}")
     
-    if not args.analyze_only:
-        logger.info(f"Output directory: {args.output_dir}")
-    else:
-        logger.info("Mode: Analysis only (no extension)")
-    
+    logger.info(f"Output directory: {args.output_dir}")
     logger.info("=" * 80)
     
     # Run tokenizer extension
-    try:
-        if args.analyze_only:
-            # TODO: Add vocabulary analysis function
-            logger.warning("Vocabulary analysis not yet implemented")
-            logger.info("Run without --analyze-only to extend tokenizer")
-            sys.exit(0)
-        
+    try:        
         # Create output directory
         output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
