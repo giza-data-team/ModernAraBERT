@@ -64,7 +64,7 @@ def parse_args():
         '--output-dir',
         type=str,
         required=False,
-        default=str(REPO_ROOT / 'models' / 'modernarabert_tokenizer'),
+        default=str(REPO_ROOT / 'models' / 'tokenizer_extension'),
         help='Directory to save extended tokenizer and model'
     )
     
