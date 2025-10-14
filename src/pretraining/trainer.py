@@ -37,29 +37,6 @@ from transformers import (
 from accelerate import Accelerator
 from accelerate.utils import set_seed
 
-
-def setup_training_logging(log_file: str = "training.log") -> logging.Logger:
-    """
-    Configure logging for the training process.
-
-    Args:
-        log_file (str): Path to log file (default: training.log)
-
-    Returns:
-        logging.Logger: Configured logger instance
-    """
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        force=True,
-        handlers=[logging.StreamHandler(), logging.FileHandler(log_file)]
-    )
-    
-    logger = logging.getLogger(__name__)
-    logger.info("Logging initialized for ModernAraBERT training")
-    return logger
-
-
 def setup_performance_optimizations(logger: logging.Logger):
     """
     Configure PyTorch and CUDA performance optimizations.
@@ -418,10 +395,7 @@ def train_model(
     
     Returns:
         str: Output directory path where the final model is saved.
-    """
-    if logger is None:
-        logger = setup_training_logging()
-    
+    """    
     # Set seed for reproducibility
     set_seed(seed)
     
