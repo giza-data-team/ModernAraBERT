@@ -4,7 +4,7 @@ This directory contains dataset configuration and download scripts for ModernAra
 
 ## Directory Structure
 
-```
+```text
 data/
 ├── README.md          # This file
 ├── links.json         # Dataset download links configuration
@@ -15,15 +15,20 @@ data/
 
 ## Dataset Configuration (`links.json`)
 
-The `links.json` file contains URLs for downloading pretraining corpora:
+The `links.json` file contains URLs for downloading pretraining corpora from two main sources:
+
+### HuggingFace Datasets
+
+- **Arabic Billion Words**: Large-scale Arabic text corpus from MohamedRashad/arabic-billion-words
 
 ### Text Links
-- **One Billion Words Corpus**: 10 parts hosted on Google Drive
-- **Wikipedia Dumps**: Multiple Arabic Wikipedia dumps from wikimedia.org and archive.org
+
+- **Wikipedia Dumps**: 10 Arabic Wikipedia dumps from wikimedia.org (May 2025)
+- **Multistream XML**: Compressed Wikipedia XML dumps for preprocessing
 
 ### XML Links
-- **Wikipedia XML**: Original Wikipedia XML dumps for preprocessing
-- **One Billion Words XML**: XML versions hosted on Google Drive
+
+- **Wikipedia XML**: Original Wikipedia XML dumps for preprocessing (same as text_links)
 
 ## Downloading Datasets
 
@@ -32,14 +37,15 @@ The `links.json` file contains URLs for downloading pretraining corpora:
 To download all pretraining datasets:
 
 ```bash
-python scripts/pretraining/run_data_collection.py --config configs/pretraining_config.yaml
+python scripts/pretraining/run_data_collection.py
 ```
 
 This will:
+
 1. Read URLs from `links.json`
-2. Download files to `data/raw/`
-3. Extract compressed files
-4. Log progress to `pipeline.log`
+2. Download HuggingFace datasets and Wikipedia dumps to `data/raw/`
+3. Extract compressed files (.bz2 archives)
+4. Log progress to `logs/data_collection.log`
 
 ### Benchmarking Data
 
@@ -80,10 +86,17 @@ Each benchmark has task-specific preprocessing:
 To add a new dataset:
 
 1. **Add URL to `links.json`**:
+
    ```json
    {
+     "huggingface_datasets": {
+       "my_hf_dataset": "username/dataset-name"
+     },
      "text_links": {
-       "my_dataset": "https://example.com/dataset.txt.bz2"
+       "my_text_dataset": "https://example.com/dataset.txt.bz2"
+     },
+     "xml_links": {
+       "my_xml_dataset": "https://example.com/dataset.xml.bz2"
      }
    }
    ```
@@ -96,13 +109,11 @@ To add a new dataset:
 
 ### Pretraining Corpus
 
-| Source | Size | Sentences | Tokens (approx) |
-|--------|------|-----------|-----------------|
-| OSIAN | ~2GB | 1.5M | 350M |
-| Arabic Billion Words | ~8GB | 3.5M | 800M |
-| Arabic Wikipedia | ~3GB | 800K | 200M |
-| OSCAR Arabic | ~4GB | 700K | 150M |
-| **Total** | **~17GB** | **6.5M+** | **1.5B+** |
+| Source | Size | Articles/Sentences | Tokens (approx) |
+|--------|------|-------------------|-----------------|
+| Arabic Billion Words (HF) | ~8GB | 5M+ articles | 1.5B+ |
+| Arabic Wikipedia (10 dumps) | ~15GB | 1M+ articles | 500M+ |
+| **Total** | **~23GB** | **6M+** | **2B+** |
 
 ### Benchmark Datasets
 
@@ -118,10 +129,8 @@ To add a new dataset:
 
 Please refer to the original dataset papers and repositories for licensing information:
 
-- **OSIAN**: Research use
-- **Arabic Billion Words**: CC BY-NC 4.0
+- **Arabic Billion Words (HuggingFace)**: See dataset page for license
 - **Wikipedia**: CC BY-SA 3.0
-- **OSCAR**: CC0 1.0
 - **HARD**: See original paper
 - **AJGT**: GitHub repository license
 - **LABR**: Research use
@@ -132,36 +141,43 @@ Please refer to the original dataset papers and repositories for licensing infor
 
 Ensure sufficient disk space:
 
-- Raw data: ~30GB
-- Processed data: ~20GB
+- Raw data: ~25GB
+- Processed data: ~15GB
 - Temporary files: ~10GB
-- **Total recommended**: 60GB free space
+- **Total recommended**: 50GB free space
 
 ## Troubleshooting
 
 ### Download Issues
 
 **Problem**: Download fails or times out
+
 **Solution**:
+
 ```bash
 # Retry with increased timeout
 python scripts/pretraining/run_data_collection.py --timeout 600
 ```
 
 **Problem**: Google Drive rate limiting
+
 **Solution**: Wait or use alternative mirrors if available
 
 ### Preprocessing Issues
 
 **Problem**: Out of memory during preprocessing
+
 **Solution**:
+
 ```bash
 # Process in smaller chunks
 python scripts/pretraining/run_data_collection.py --chunk-size 1000000
 ```
 
 **Problem**: Farasa segmentation errors
+
 **Solution**: Ensure Farasa is properly installed:
+
 ```bash
 pip install --upgrade farasa
 ```
@@ -171,18 +187,25 @@ pip install --upgrade farasa
 If you use these datasets, please cite the original papers:
 
 ```bibtex
-@inproceedings{zeroual-etal-2019-osian,
-  title={OSIAN: Open Source International Arabic News Corpus},
-  author={Zeroual, Imad and others},
-  booktitle={Proceedings of WANLP},
-  year={2019}
-}
-
 @article{el20161,
   title={1.5 billion words arabic corpus},
   author={El-Khair, Ibrahim Abu},
   journal={arXiv preprint arXiv:1611.04033},
   year={2016}
+}
+
+@misc{wikipedia2025,
+  title={Arabic Wikipedia Dumps},
+  author={Wikimedia Foundation},
+  year={2025},
+  url={https://dumps.wikimedia.org/arwiki/}
+}
+
+@misc{mohamedrashad2024,
+  title={Arabic Billion Words Dataset},
+  author={Mohamed Rashad},
+  year={2024},
+  url={https://huggingface.co/datasets/MohamedRashad/arabic-billion-words}
 }
 
 % Add other dataset citations as needed
@@ -191,6 +214,6 @@ If you use these datasets, please cite the original papers:
 ## Contact
 
 For dataset-related questions:
-- Open an issue on GitHub
-- Contact: ahmed.aldamati@gizasystems.com
 
+- Open an issue on GitHub
+- Contact: [ahmed.aldamati@gizasystems.com](mailto:ahmed.aldamati@gizasystems.com)
