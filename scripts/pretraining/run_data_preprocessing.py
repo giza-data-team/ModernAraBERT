@@ -3,40 +3,29 @@
 User-Facing Script: Data Preprocessing for ModernAraBERT Pretraining
 
 This script provides a simple interface to preprocess Arabic text data
-for ModernAraBERT pretraining, including:
+for ModernAraBERT pretraining. It runs the complete pipeline:
 - XML text extraction (Wikipedia dumps)
 - Text file processing with Arabic normalization
 - Farasa morphological segmentation
 - Train/val/test data splitting
 
 Usage Examples:
-    # Full preprocessing pipeline
+    # Run preprocessing pipeline with default output directory
     python scripts/pretraining/run_data_preprocessing.py \\
-        --input-dir data/raw \\
-        --output-dir data/processed \\
-        --all
+        --input-dir data/raw
     
-    # Only process XML files (Wikipedia)
+    # Run preprocessing with custom output directory
     python scripts/pretraining/run_data_preprocessing.py \\
         --input-dir data/raw/wikipedia \\
-        --output-dir data/processed/wikipedia \\
-        --process-xml
+        --output-dir data/processed/wikipedia
     
-    # Process text files and segment with Farasa
+    # Run with debug logging
     python scripts/pretraining/run_data_preprocessing.py \\
-        --input-dir data/raw/osian \\
-        --output-dir data/processed/osian \\
-        --process-text --segment
-    
-    # Only split already processed data
-    python scripts/pretraining/run_data_preprocessing.py \\
-        --input-dir data/processed \\
-        --output-dir data/final \\
-        --split
+        --input-dir data/raw \\
+        --log-level DEBUG
 """
 
 import sys
-import os
 from pathlib import Path
 import argparse
 import logging
@@ -65,15 +54,15 @@ def parse_args():
     parser.add_argument(
         '--input-dir',
         type=str,
-        required=True,
-        help='Input directory containing raw data'
+        default='./data/raw/extracted',
+        help='Input directory containing extracted XML/text (default: ./data/extracted)'
     )
     
     parser.add_argument(
         '--output-dir',
         type=str,
-        required=True,
-        help='Output directory for processed data'
+        default='./data/preprocessed',
+        help='Output directory for preprocessed data (default: ./data/preprocessed)'
     )
     
     # Processing steps
@@ -82,44 +71,33 @@ def parse_args():
         action='store_true',
         help='Run all preprocessing steps (XML → text → segment → split)'
     )
-    
     parser.add_argument(
         '--process-xml',
         action='store_true',
-        help='Extract text from XML files (Wikipedia dumps)'
+        help='Extract text from XML files only'
     )
-    
     parser.add_argument(
         '--process-text',
         action='store_true',
-        help='Process text files (normalization, filtering)'
+        help='Process text files only'
     )
-    
     parser.add_argument(
         '--segment',
         action='store_true',
-        help='Apply Farasa morphological segmentation'
+        help='Apply Farasa segmentation only'
     )
-    
     parser.add_argument(
         '--split',
         action='store_true',
-        help='Split data into train/val/test (60/20/20)'
+        help='Split data into train/val/test only'
     )
-    
-    # Processing parameters
+
+    # Parameters
     parser.add_argument(
-        '--min-words',
+        '--batch-size',
         type=int,
-        default=100,
-        help='Minimum words per document'
-    )
-    
-    parser.add_argument(
-        '--max-words',
-        type=int,
-        default=8000,
-        help='Maximum words per document'
+        default=1000,
+        help='Batch size for segmentation'
     )
     
     parser.add_argument(
@@ -138,7 +116,7 @@ def main():
     args = parse_args()
     
     # Setup logging
-    setup_logging(level=getattr(logging, args.log_level))
+    setup_logging(level=getattr(logging, args.log_level), log_file="data_preprocessing.log")
     logger = logging.getLogger(__name__)
     
     # Validate inputs
@@ -151,25 +129,37 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
+    # Determine steps
+    run_xml = args.all or args.process_xml
+    run_text = args.all or args.process_text
+    run_segment = args.all or args.segment
+    run_split = args.all or args.split
+
+    if not any([run_xml, run_text, run_segment, run_split]):
+        logger.error("No processing steps specified. Use --all or individual flags.")
+        logger.info("Run with --help for usage information.")
+        sys.exit(1)
+
     # Display configuration
     logger.info("=" * 80)
     logger.info("ModernAraBERT Data Preprocessing")
     logger.info("=" * 80)
     logger.info(f"Input directory: {input_dir}")
     logger.info(f"Output directory: {output_dir}")
-    logger.info(f"Word count range: {args.min_words}-{args.max_words}")
+    if args.all:
+        logger.info("Running all preprocessing steps: XML → text → segment → split")
+    else:
+        enabled = []
+        if run_xml:
+            enabled.append('xml')
+        if run_text:
+            enabled.append('text')
+        if run_segment:
+            enabled.append('segment')
+        if run_split:
+            enabled.append('split')
+        logger.info(f"Running selected steps: {', '.join(enabled)}")
     logger.info("=" * 80)
-    
-    # Determine which steps to run
-    run_xml = args.all or args.process_xml
-    run_text = args.all or args.process_text
-    run_segment = args.all or args.segment
-    run_split = args.all or args.split
-    
-    if not any([run_xml, run_text, run_segment, run_split]):
-        logger.error("No processing steps specified. Use --all or individual flags.")
-        logger.info("Run with --help for usage information.")
-        sys.exit(1)
     
     try:
         # Step 1: Extract text from XML
@@ -177,10 +167,11 @@ def main():
             logger.info("=" * 80)
             logger.info("Step 1: Extracting text from XML files")
             logger.info("=" * 80)
-            xml_output = output_dir / 'extracted_text'
-            extract_text_from_xml_dir(
-                xml_dir=str(input_dir),
-                output_dir=str(xml_output)
+            xml_output = output_dir / 'extracted'
+            xml_output.mkdir(parents=True, exist_ok=True)
+            process_xml(
+                input_directory=str(input_dir),
+                output_directory=str(xml_output)
             )
             input_dir = xml_output  # Update input for next step
         
@@ -189,12 +180,18 @@ def main():
             logger.info("=" * 80)
             logger.info("Step 2: Processing text files")
             logger.info("=" * 80)
-            text_output = output_dir / 'processed_text'
-            process_text_files_parallel(
-                input_dir=str(input_dir),
-                output_dir=str(text_output),
-                min_words=args.min_words,
-                max_words=args.max_words
+            # If xml wasn't run this time, expect extracted as source
+            if not args.all and not run_xml:
+                candidate = output_dir / 'extracted'
+                if not candidate.exists():
+                    logger.error(f"Expected extracted dir not found: {candidate}")
+                    sys.exit(1)
+                input_dir = candidate
+            text_output = output_dir / 'processed'
+            text_output.mkdir(parents=True, exist_ok=True)
+            process_text_files(
+                input_directory=str(input_dir),
+                output_directory=str(text_output)
             )
             input_dir = text_output  # Update input for next step
         
@@ -203,22 +200,39 @@ def main():
             logger.info("=" * 80)
             logger.info("Step 3: Applying Farasa segmentation")
             logger.info("=" * 80)
+            # If text wasn't run this time, expect processed as source
+            if not args.all and not run_text:
+                candidate = output_dir / 'processed'
+                if not candidate.exists():
+                    logger.error(f"Expected processed dir not found: {candidate}")
+                    sys.exit(1)
+                input_dir = candidate
             segment_output = output_dir / 'segmented'
-            segment_text_files_farasa(
-                input_dir=str(input_dir),
-                output_dir=str(segment_output)
+            segment_output.mkdir(parents=True, exist_ok=True)
+            segment_data(
+                input_directory=str(input_dir),
+                output_directory=str(segment_output),
+                batch_size=args.batch_size
             )
-            input_dir = segment_output  # Update input for next step
+            input_dir = segment_output
         
         # Step 4: Split data
         if run_split:
             logger.info("=" * 80)
             logger.info("Step 4: Splitting data into train/val/test")
             logger.info("=" * 80)
+            # If segment wasn't run this time, expect segmented as source
+            if not args.all and not run_segment:
+                candidate = output_dir / 'segmented'
+                if not candidate.exists():
+                    logger.error(f"Expected segmented dir not found: {candidate}")
+                    sys.exit(1)
+                input_dir = candidate
             split_output = output_dir / 'splits'
+            split_output.mkdir(parents=True, exist_ok=True)
             split_data(
-                input_dir=str(input_dir),
-                output_dir=str(split_output),
+                input_directory=str(input_dir),
+                output_base_dir=str(split_output),
                 train_ratio=0.6,
                 val_ratio=0.2,
                 test_ratio=0.2
