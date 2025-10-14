@@ -149,3 +149,5 @@ results/*.txt
 *.fdb_latexmk
 *.out
 
+# Models
+models/
