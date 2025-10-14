@@ -112,6 +112,8 @@ ModernAraBERT/
 ├── scripts/                      # Executable entry points
 │   ├── pretraining/              # Pretraining pipelines
 │   └── benchmarking/             # Benchmark evaluation
+│       ├── run_sa_benchmark.py   # Streamlined SA benchmark interface
+│       └── run_ner_benchmark.sh  # NER benchmark script
 ├── configs/                      # YAML configuration files
 ├── data/                         # Data download and preprocessing
 ├── docs/                         # Extended documentation
@@ -146,10 +148,37 @@ See [PRETRAINING.md](./docs/PRETRAINING.md) for detailed instructions.
 
 ### Benchmarking
 
-Run sentiment analysis benchmarks:
+#### Sentiment Analysis
+
+**Supported datasets**: HARD, LABR, AJGT
+
+**New streamlined interface** (recommended):
+```bash
+# Run full pipeline on HARD dataset
+python scripts/benchmarking/run_sa_benchmark.py --datasets hard
+
+# Run full pipeline on multiple datasets
+python scripts/benchmarking/run_sa_benchmark.py --datasets hard labr ajgt
+
+# Run only data preparation stage
+python scripts/benchmarking/run_sa_benchmark.py --stage prepare-data --datasets hard labr
+
+# Run only benchmark stage (assumes data already prepared)
+python scripts/benchmarking/run_sa_benchmark.py --stage benchmark --datasets hard
+
+# Force re-download even if files exist
+python scripts/benchmarking/run_sa_benchmark.py --datasets hard labr --force-redownload
+
+# Custom model
+python scripts/benchmarking/run_sa_benchmark.py --datasets hard --model-name arabert --model-path aubmindlab/bert-base-arabert
+```
+
+**Legacy shell script** (still supported):
 ```bash
 bash scripts/benchmarking/run_sa_benchmark.sh --model-name modernbert --dataset hard
 ```
+
+#### Named Entity Recognition
 
 Run NER benchmarks:
 ```bash
