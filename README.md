@@ -109,7 +109,7 @@ ModernAraBERT/
 │   ├── pretraining/              # Pretraining scripts
 │   ├── benchmarking/             # Benchmarking (SA, NER, QA)
 │   └── utils/                    # Shared utilities
-├── scripts/                      # Executable entry points
+├── scripts/                      # Executable entry point
 │   ├── pretraining/              # Pretraining pipelines
 │   └── benchmarking/             # Benchmark evaluation
 │       ├── run_sa_benchmark.py   # Streamlined SA benchmark interface
