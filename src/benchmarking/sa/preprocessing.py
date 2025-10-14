@@ -6,9 +6,6 @@ This module provides utilities for Arabic text preprocessing:
 - Text chunking and windowing
 - Dataset processing and splitting
 - Text normalization
-
-Original file: "text_preprocessing.py" (preprocessing functions)
-Status: Logic unchanged, added missing utility functions
 """
 
 import os
@@ -76,7 +73,7 @@ def process_text(text: str, window_size: int) -> List[str]:
     return chunks
 
 
-def process_dataset(dataset: Dataset, window_size: int, base_dir: str):
+def process_dataset(dataset: Dataset, window_size: int, base_dir: str) -> bool:
     """
     Process a dataset by chunking texts, filtering Arabic content, and splitting into train/val/test.
 
@@ -84,100 +81,83 @@ def process_dataset(dataset: Dataset, window_size: int, base_dir: str):
         dataset (Dataset): HuggingFace dataset with 'text', 'id', and 'label' fields
         window_size (int): Maximum words per chunk
         base_dir (str): Directory to save processed files
+        
+    Returns:
+        bool: True on success, False on failure
     """
-    print("Processing and segmenting texts...")
-    processed_texts = []
-    processed_ids = []
-    processed_labels = []
+    try:
+        print("Processing and segmenting texts...")
+        processed_texts = []
+        processed_ids = []
+        processed_labels = []
 
-    for example in dataset:
-        text = example.get("text", None)
-        if text is None or not isinstance(text, str) or text.strip() == "":
-            continue 
+        for example in dataset:
+            text = example.get("text", None)
+            if text is None or not isinstance(text, str) or text.strip() == "":
+                continue 
+            
+            doc_id = example.get("id", None)
+            label = example.get("label", None)
+            
+            # Only process Arabic text
+            if is_arabic_text(text):
+                chunks = process_text(text, window_size)
+                for chunk in chunks:
+                    processed_texts.append(chunk)
+                    processed_ids.append(doc_id)
+                    processed_labels.append(label)
+
+        print(f"Total processed chunks: {len(processed_texts)}")
         
-        doc_id = example.get("id", None)
-        label = example.get("label", None)
+        # Create dataset from processed data
+        final_dataset = Dataset.from_dict({
+            "id": processed_ids,
+            "text": processed_texts,
+            "label": processed_labels
+        })
         
-        # Only process Arabic text
-        if is_arabic_text(text):
-            chunks = process_text(text, window_size)
-            for chunk in chunks:
-                processed_texts.append(chunk)
-                processed_ids.append(doc_id)
-                processed_labels.append(label)
-
-    print(f"Total processed chunks: {len(processed_texts)}")
-    
-    # Create dataset from processed data
-    final_dataset = Dataset.from_dict({
-        "id": processed_ids,
-        "text": processed_texts,
-        "label": processed_labels
-    })
-    
-    # Split: 60% train, 20% test, 20% validation
-    split_dataset = final_dataset.train_test_split(test_size=0.4, seed=42)
-    test_val_split = split_dataset["test"].train_test_split(test_size=0.5, seed=42)
-    
-    dataset_dict = DatasetDict({
-        "train": split_dataset["train"],
-        "test": test_val_split["train"],
-        "validation": test_val_split["test"]
-    })
-    
-    # Save to TSV files
-    print("Saving dataset to TXT files...")
-    os.makedirs(base_dir, exist_ok=True)
-    
-    for split in ["train", "test", "validation"]:
-        file_path = os.path.join(base_dir, f"{split}.txt")
-        with open(file_path, "w", encoding="utf-8") as f:
-            for example in dataset_dict[split]:
-                if example["label"] is not None:
-                    text_line = f"{example['id']}\t{example['text']}\t{example['label']}"
-                else:
-                    text_line = f"{example['id']}\t{example['text']}"
-                f.write(text_line + "\n")
-        print(f"Saved {split} split to {file_path}")
-    
-    print("Dataset segmentation and splitting complete.")
-    print("Files saved: train.txt, test.txt, validation.txt")
-    
-    # Log statistics
-    logging.info(f"Dataset processing complete:")
-    logging.info(f"  Train: {len(dataset_dict['train'])} samples")
-    logging.info(f"  Test: {len(dataset_dict['test'])} samples")
-    logging.info(f"  Validation: {len(dataset_dict['validation'])} samples")
+        # Split: 60% train, 20% test, 20% validation
+        split_dataset = final_dataset.train_test_split(test_size=0.4, seed=42)
+        test_val_split = split_dataset["test"].train_test_split(test_size=0.5, seed=42)
+        
+        dataset_dict = DatasetDict({
+            "train": split_dataset["train"],
+            "test": test_val_split["train"],
+            "validation": test_val_split["test"]
+        })
+        
+        # Save to TSV files
+        print("Saving dataset to TXT files...")
+        os.makedirs(base_dir, exist_ok=True)
+        
+        for split in ["train", "test", "validation"]:
+            file_path = os.path.join(base_dir, f"{split}.txt")
+            with open(file_path, "w", encoding="utf-8") as f:
+                for example in dataset_dict[split]:
+                    if example["label"] is not None:
+                        text_line = f"{example['id']}\t{example['text']}\t{example['label']}"
+                    else:
+                        text_line = f"{example['id']}\t{example['text']}"
+                    f.write(text_line + "\n")
+            print(f"Saved {split} split to {file_path}")
+        
+        print("Dataset segmentation and splitting complete.")
+        print("Files saved: train.txt, test.txt, validation.txt")
+        
+        # Log statistics
+        logging.info("Dataset processing complete:")
+        logging.info(f"  Train: {len(dataset_dict['train'])} samples")
+        logging.info(f"  Test: {len(dataset_dict['test'])} samples")
+        logging.info(f"  Validation: {len(dataset_dict['validation'])} samples")
+        
+        return True
+        
+    except Exception as e:
+        print(f"Error processing dataset: {str(e)}")
+        logging.error(f"Error processing dataset: {str(e)}")
+        return False
 
 
-if __name__ == "__main__":
-    import argparse
-    from datasets import load_dataset
-    
-    parser = argparse.ArgumentParser(description="Process SA dataset")
-    parser.add_argument("--dataset", type=str, required=True,
-                        help="HuggingFace dataset name (e.g., 'Elnagara/hard')")
-    parser.add_argument("--output-dir", type=str, required=True,
-                        help="Output directory for processed files")
-    parser.add_argument("--window-size", type=int, default=8192,
-                        help="Maximum words per chunk (default: 8192)")
-    parser.add_argument("--split", type=str, default="train",
-                        help="Dataset split to process (default: train)")
-    parser.add_argument("--token", type=str, default=None,
-                        help="HuggingFace token for private datasets")
-    
-    args = parser.parse_args()
-    
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s"
-    )
-    
-    print(f"Loading dataset: {args.dataset}")
-    dataset = load_dataset(args.dataset, "plain_text", split=args.split, token=args.token)
-    
-    print(f"Processing dataset with window size: {args.window_size}")
-    process_dataset(dataset, args.window_size, args.output_dir)
-    
-    print("\nProcessing complete!")
+# Note: This module is now used as a library by run_sa_benchmark.py
+# For direct usage, use: python scripts/benchmarking/run_sa_benchmark.py
 

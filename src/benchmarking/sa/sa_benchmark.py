@@ -17,15 +17,12 @@ import os
 import logging
 import random
 import json
-import csv
 import numpy as np
 import torch
 import torch.nn as nn
 import psutil
-import pandas as pd
 from datetime import datetime
 from typing import Dict, Optional, Tuple
-from datasets import load_dataset, Dataset
 from torch.utils.data import DataLoader
 from transformers import (
     AutoTokenizer,
@@ -37,10 +34,7 @@ from transformers import (
 from .datasets import (
     DATASET_CONFIGS,
     load_sentiment_dataset,
-    prepare_astd_benchmark,
-    prepare_labr_benchmark
 )
-from .preprocessing import process_dataset
 from .train import train_model, evaluate_model
 
 
@@ -50,25 +44,25 @@ os.environ.setdefault('TOKENIZERS_PARALLELISM', 'false')
 
 # Model configurations
 MODEL_CONFIGS = {
-    "modernbert": {
-        "path": None,  # To be set via command line
-        "tokenizer_path": None  # To be set via command line
+    "modernarabert": {
+        "path": "gizadatateam/ModernAraBERT",
+        "tokenizer_path": "gizadatateam/ModernAraBERT"
     },
     "arabert": {
         "path": "aubmindlab/bert-base-arabert",
-        "tokenizer_path": None  # Use same as model
+        "tokenizer_path": "aubmindlab/bert-base-arabert"
     },
     "mbert": {
         "path": "google-bert/bert-base-multilingual-cased",
-        "tokenizer_path": None
+        "tokenizer_path": "google-bert/bert-base-multilingual-cased"
     },
     "arabert2": {
         "path": "aubmindlab/bert-base-arabertv2",
-        "tokenizer_path": None
+        "tokenizer_path": "aubmindlab/bert-base-arabertv2"
     },
     "marbert": {
         "path": "UBC-NLP/MARBERTv2",
-        "tokenizer_path": None
+        "tokenizer_path": "UBC-NLP/MARBERTv2"
     },
 }
 
@@ -440,86 +434,6 @@ def run_sa_benchmark(
     return results
 
 
-if __name__ == "__main__":
-    import argparse
-    
-    parser = argparse.ArgumentParser("Sentiment Analysis Benchmarking for ModernAraBERT")
-    
-    # Model and dataset
-    parser.add_argument("--model-name", type=str, default='modernbert',
-                        choices=['modernbert', 'arabert', 'mbert', 'arabert2', 'marbert'],
-                        help="Model to benchmark")
-    parser.add_argument("--model-path", type=str, required=True,
-                        help="Path to pretrained model")
-    parser.add_argument("--tokenizer-path", type=str, default=None,
-                        help="Path to tokenizer (default: same as model)")
-    parser.add_argument("--dataset", type=str, default='hard',
-                        choices=['hard', 'astd', 'labr', 'ajgt'],
-                        help="Dataset to evaluate on")
-    parser.add_argument("--data-dir", type=str, required=True,
-                        help="Directory containing dataset files")
-    
-    # Training parameters
-    parser.add_argument("--batch-size", type=int, default=16,
-                        help="Batch size (default: 16)")
-    parser.add_argument("--max-length", type=int, default=512,
-                        help="Maximum sequence length (default: 512)")
-    parser.add_argument("--epochs", type=int, default=50,
-                        help="Number of epochs (default: 50)")
-    parser.add_argument("--learning-rate", type=float, default=2e-5,
-                        help="Learning rate (default: 2e-5)")
-    parser.add_argument("--patience", type=int, default=5,
-                        help="Early stopping patience (default: 5)")
-    parser.add_argument("--num-workers", type=int, default=2,
-                        help="DataLoader workers (default: 2)")
-    parser.add_argument("--seed", type=int, default=42,
-                        help="Random seed (default: 42)")
-    
-    # Model options
-    parser.add_argument("--no-freeze", action="store_true",
-                        help="Train full model (don't freeze encoder)")
-    
-    # Checkpointing
-    parser.add_argument("--checkpoint", type=str, default=None,
-                        help="Path to save/load model checkpoint")
-    parser.add_argument("--continue-from-checkpoint", action="store_true",
-                        help="Load from checkpoint and continue training")
-    parser.add_argument("--save-every", type=int, default=None,
-                        help="Save checkpoint every N epochs")
-    
-    # Other
-    parser.add_argument("--hf-token", type=str, default=None,
-                        help="HuggingFace token for private models")
-    parser.add_argument("--log-dir", type=str, default="./logs",
-                        help="Directory for log files (default: ./logs)")
-    
-    args = parser.parse_args()
-    
-    # Get dataset configuration
-    dataset_config = DATASET_CONFIGS.get(args.dataset.lower())
-    if dataset_config is None:
-        raise ValueError(f"Unknown dataset: {args.dataset}")
-    
-    # Run benchmark
-    results = run_sa_benchmark(
-        model_name=args.model_name,
-        dataset_name=args.dataset,
-        model_path=args.model_path,
-        tokenizer_path=args.tokenizer_path,
-        data_dir=args.data_dir,
-        num_labels=dataset_config["num_labels"],
-        batch_size=args.batch_size,
-        max_length=args.max_length,
-        epochs=args.epochs,
-        learning_rate=args.learning_rate,
-        patience=args.patience,
-        num_workers=args.num_workers,
-        freeze_encoder=not args.no_freeze,
-        checkpoint_path=args.checkpoint,
-        continue_from_checkpoint=args.continue_from_checkpoint,
-        save_every=args.save_every,
-        hf_token=args.hf_token,
-        log_dir=args.log_dir,
-        seed=args.seed
-    )
+# Note: This module is now used as a library by run_sa_benchmark.py
+# For direct usage, use: python scripts/benchmarking/run_sa_benchmark.py
 

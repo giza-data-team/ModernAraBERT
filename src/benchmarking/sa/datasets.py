@@ -11,18 +11,15 @@ Provides functions for:
 - Loading datasets from various sources (HuggingFace, CSV, XLSX)
 - Processing and splitting datasets
 - Tokenizing and preparing data for training
-
-Original file: "text_preprocessing.py" (dataset loading functions)
-Status: Logic unchanged, improved modularity
 """
 
 import os
+import sys
 import logging
 import csv
 import torch
 import pandas as pd
-from typing import List, Tuple, Dict, Optional
-from datasets import Dataset, DatasetDict
+from typing import List, Dict, Optional
 from transformers import PreTrainedTokenizer
 
 
@@ -234,85 +231,148 @@ def prepare_astd_benchmark(data_dir: str, astd_info: Dict[str, str]):
     logging.info(f"ASTD: Train={len(train_df)}, Test={len(test_df)}, Val={len(val_df)}")
 
 
-def prepare_labr_benchmark(data_dir: str, labr_info: Dict[str, str]):
+def prepare_labr_benchmark(data_dir: str, labr_info: Dict[str, str]) -> bool:
     """
     Download and prepare LABR dataset for benchmarking.
 
     Args:
         data_dir (str): Directory to save processed files
         labr_info (dict): Dataset configuration with URLs
+        
+    Returns:
+        bool: True on success, False on failure
     """
-    os.makedirs(data_dir, exist_ok=True)
-    
-    # Load main dataset
-    main_df = pd.read_csv(
-        labr_info["url"],
-        sep="\t",
-        header=None,
-        names=labr_info["column_names"],
-        engine="python"
-    )
-    
-    # Convert ratings and filter
-    main_df["rating"] = pd.to_numeric(main_df["rating"], errors="coerce")
-    main_df = main_df.dropna(subset=["rating"])
-    main_df = main_df[main_df["rating"] != 3]  # Remove neutral ratings
-    main_df["label"] = main_df["rating"].apply(lambda x: 1 if x >= 4 else 0)
-    
-    # Create ID from index
-    main_df = main_df.reset_index()  
-    main_df["id"] = main_df["index"].astype(int).astype(str)
-    main_df["text"] = main_df["review"].astype(str).str.strip()
-    main_df = main_df[["id", "text", "label"]]
-    
-    print("Sample main file IDs (index-based):", main_df["id"].head(5).tolist())
-    
-    # Load train IDs and merge
-    train_ids = pd.read_csv(labr_info["benchmark_train"], header=None, names=["id"], dtype=str)
-    train_ids["id"] = train_ids["id"].astype(str).str.strip()
-    print("Sample benchmark train IDs:", train_ids["id"].head(5).tolist())
-    
-    # Load test IDs and merge
-    test_ids = pd.read_csv(labr_info["benchmark_test"], header=None, names=["id"], dtype=str)
-    test_ids["id"] = test_ids["id"].astype(str).str.strip()
-    print("Sample benchmark test IDs:", test_ids["id"].head(5).tolist())
-    
-    train_df = pd.merge(train_ids, main_df, on="id", how="inner")
-    test_df = pd.merge(test_ids, main_df, on="id", how="inner")
-    
-    # Save to files
-    train_path = os.path.join(data_dir, "train.txt")
-    test_path = os.path.join(data_dir, "test.txt")
-    
-    train_df.to_csv(train_path, sep="\t", index=False, header=False)
-    test_df.to_csv(test_path, sep="\t", index=False, header=False)
-    
-    print(f"LABR benchmark files prepared in {data_dir}")
-    print(f"Train file: {train_path} (rows: {len(train_df)})")
-    print(f"Test file: {test_path} (rows: {len(test_df)})")
-    logging.info(f"LABR: Train={len(train_df)}, Test={len(test_df)}")
+    try:
+        os.makedirs(data_dir, exist_ok=True)
+        
+        # Load main dataset
+        main_df = pd.read_csv(
+            labr_info["url"],
+            sep="\t",
+            header=None,
+            names=labr_info["column_names"],
+            engine="python"
+        )
+        
+        # Convert ratings and filter
+        main_df["rating"] = pd.to_numeric(main_df["rating"], errors="coerce")
+        main_df = main_df.dropna(subset=["rating"])
+        main_df = main_df[main_df["rating"] != 3]  # Remove neutral ratings
+        main_df["label"] = main_df["rating"].apply(lambda x: 1 if x >= 4 else 0)
+        
+        # Create ID from index
+        main_df = main_df.reset_index()  
+        main_df["id"] = main_df["index"].astype(int).astype(str)
+        main_df["text"] = main_df["review"].astype(str).str.strip()
+        main_df = main_df[["id", "text", "label"]]
+        
+        print("Sample main file IDs (index-based):", main_df["id"].head(5).tolist())
+        
+        # Load train IDs and merge
+        train_ids = pd.read_csv(labr_info["benchmark_train"], header=None, names=["id"], dtype=str)
+        train_ids["id"] = train_ids["id"].astype(str).str.strip()
+        print("Sample benchmark train IDs:", train_ids["id"].head(5).tolist())
+        
+        # Load test IDs and merge
+        test_ids = pd.read_csv(labr_info["benchmark_test"], header=None, names=["id"], dtype=str)
+        test_ids["id"] = test_ids["id"].astype(str).str.strip()
+        print("Sample benchmark test IDs:", test_ids["id"].head(5).tolist())
+        
+        train_df = pd.merge(train_ids, main_df, on="id", how="inner")
+        test_df = pd.merge(test_ids, main_df, on="id", how="inner")
+        
+        # Save to files
+        train_path = os.path.join(data_dir, "train.txt")
+        test_path = os.path.join(data_dir, "test.txt")
+        
+        train_df.to_csv(train_path, sep="\t", index=False, header=False)
+        test_df.to_csv(test_path, sep="\t", index=False, header=False)
+        
+        print(f"LABR benchmark files prepared in {data_dir}")
+        print(f"Train file: {train_path} (rows: {len(train_df)})")
+        print(f"Test file: {test_path} (rows: {len(test_df)})")
+        logging.info(f"LABR: Train={len(train_df)}, Test={len(test_df)}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"Error preparing LABR dataset: {str(e)}")
+        logging.error(f"Error preparing LABR dataset: {str(e)}")
+        return False
 
 
-if __name__ == "__main__":
-    import argparse
-    
-    parser = argparse.ArgumentParser(description="Prepare SA benchmark datasets")
-    parser.add_argument("--dataset", type=str, required=True, choices=["astd", "labr"], 
-                        help="Dataset to prepare")
-    parser.add_argument("--output-dir", type=str, required=True,
-                        help="Output directory for processed files")
-    
-    args = parser.parse_args()
-    
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s"
-    )
-    
-    if args.dataset == "astd":
-        prepare_astd_benchmark(args.output_dir, DATASET_CONFIGS["astd"])
-    elif args.dataset == "labr":
-        prepare_labr_benchmark(args.output_dir, DATASET_CONFIGS["labr"])
-    
-    print(f"\nDataset preparation complete!")
+def prepare_ajgt_benchmark(data_dir: str, ajgt_info: Dict[str, str]) -> bool:
+    """
+    Download and prepare AJGT dataset for benchmarking.
+
+    Args:
+        data_dir (str): Directory to save processed files
+        ajgt_info (dict): Dataset configuration with URLs
+
+    Returns:
+        bool: True on success, False on failure
+    """
+    try:
+        os.makedirs(data_dir, exist_ok=True)
+        
+        # Download XLSX from GitHub
+        print(f"Downloading AJGT dataset from {ajgt_info['url']}")
+        main_df = pd.read_excel(ajgt_info["url"], engine='openpyxl')
+        
+        # Verify expected columns
+        expected_columns = ["ID", "Feed", "Sentiment"]
+        if not all(col in main_df.columns for col in expected_columns):
+            print(f"Error: Expected columns {expected_columns}, got {list(main_df.columns)}")
+            return False
+        
+        # Map sentiment labels
+        sentiment_mapping = {"Positive": 1, "Negative": 0}
+        main_df["label"] = main_df["Sentiment"].map(sentiment_mapping)
+        
+        # Remove rows with unmapped sentiments
+        main_df = main_df.dropna(subset=["label"])
+        
+        # Create ID column (use existing ID if available, otherwise create from index)
+        if "ID" in main_df.columns:
+            main_df["id"] = main_df["ID"].astype(str)
+        else:
+            main_df["id"] = main_df.index.astype(str)
+        
+        # Prepare final dataframe
+        main_df["text"] = main_df["Feed"].astype(str).str.strip()
+        main_df = main_df[["id", "text", "label"]]
+        
+        print(f"Loaded {len(main_df)} samples from AJGT dataset")
+        
+        # Split into train/test/validation (60/20/20)
+        from sklearn.model_selection import train_test_split
+        
+        train_df, temp_df = train_test_split(main_df, test_size=0.4, random_state=42, stratify=main_df["label"])
+        test_df, val_df = train_test_split(temp_df, test_size=0.5, random_state=42, stratify=temp_df["label"])
+        
+        # Save to files
+        train_path = os.path.join(data_dir, "train.txt")
+        test_path = os.path.join(data_dir, "test.txt")
+        val_path = os.path.join(data_dir, "validation.txt")
+        
+        train_df.to_csv(train_path, sep="\t", index=False, header=False)
+        test_df.to_csv(test_path, sep="\t", index=False, header=False)
+        val_df.to_csv(val_path, sep="\t", index=False, header=False)
+        
+        print(f"AJGT benchmark files prepared in {data_dir}")
+        print(f"Train file: {train_path} (rows: {len(train_df)})")
+        print(f"Test file: {test_path} (rows: {len(test_df)})")
+        print(f"Validation file: {val_path} (rows: {len(val_df)})")
+        logging.info(f"AJGT: Train={len(train_df)}, Test={len(test_df)}, Val={len(val_df)}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"Error preparing AJGT dataset: {str(e)}")
+        logging.error(f"Error preparing AJGT dataset: {str(e)}")
+        return False
+
+
+# Note: This module is now used as a library by run_sa_benchmark.py
+# For direct usage, use: python scripts/benchmarking/run_sa_benchmark.py
 
