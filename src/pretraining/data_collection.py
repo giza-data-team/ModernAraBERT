@@ -329,23 +329,6 @@ def download_datasets_from_links(links_json_path, output_dir):
                 logging.info(f"Failed to download {name}: {e}")
                 downloaded_files['failed'].append((name, str(e)))
     
-    # Download one billion links (kept for backwards compatibility, but should be empty now)
-    if 'links_one_billion' in links_data:
-        logging.info(f"Processing {len(links_data['links_one_billion'])} One Billion Word links")
-        for name, link in links_data['links_one_billion'].items():
-            try:
-                output_path = os.path.join(output_dir, f"{name}.xml")
-                
-                if '/drive.google.com/' in link:
-                    download_from_drive(link, output_path)
-                else:
-                    download_direct_link_binary(link, output_path)
-                
-                downloaded_files['xml'].append(output_path)
-            except Exception as e:
-                logging.info(f"Failed to download {name}: {e}")
-                downloaded_files['failed'].append((name, str(e)))
-    
     # Log summary
     logging.info(f"Download complete: {len(downloaded_files['huggingface'])} HuggingFace files, "
               f"{len(downloaded_files['text'])} text files, "
@@ -389,6 +372,23 @@ def extract_all_compressed(input_dir, output_dir):
             # Add extracted files to list
             for extracted_file in os.listdir(output_dir):
                 extracted_files.append(os.path.join(output_dir, extracted_file))
+
+        else:
+            # Move plain text/xml files into extracted directory to unify layout
+            dest_path = os.path.join(output_dir, filename)
+            try:
+                # If same path, skip; otherwise move
+                if os.path.abspath(file_path) != os.path.abspath(dest_path):
+                    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                    try:
+                        os.rename(file_path, dest_path)
+                    except OSError:
+                        # Fallback to copy in case of cross-device move
+                        with open(file_path, 'rb') as src, open(dest_path, 'wb') as dst:
+                            dst.write(src.read())
+                extracted_files.append(dest_path)
+            except Exception:
+                logging.info(f"Skipping move for text file: {file_path}")
     
     logging.info(f"Extracted {len(extracted_files)} files")
     return extracted_files
