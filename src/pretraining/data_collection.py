@@ -21,29 +21,6 @@ import json
 import logging
 import time
 
-
-
-def setup_logging(level=logging.INFO, log_file="data_collection.log"):
-    """
-    Configure logging for the data collection process.
-    
-    Args:
-        level: Logging level (default: logging.INFO)
-        log_file: Path to log file (default: data_collection.log)
-    """
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler()
-        ],
-        force=True
-    )
-    logging.info("Logging initialized for data collection")
-
-
-
 def create_directory(directory_path):
     """
     Create a directory if it does not exist, and log the operation.

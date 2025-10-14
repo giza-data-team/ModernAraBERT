@@ -25,10 +25,8 @@ import logging
 REPO_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from src.pretraining.data_collection import (
-    download_and_extract_all_datasets,
-    setup_logging
-)
+from src.pretraining.data_collection import download_and_extract_all_datasets
+from src.utils.logging import setup_logging
 
 
 def parse_args():
@@ -68,7 +66,7 @@ def main():
     args = parse_args()
     
     # Setup logging
-    setup_logging(level=getattr(logging, args.log_level))
+    setup_logging(level=getattr(logging, args.log_level), log_file="data_collection.log")
     logger = logging.getLogger(__name__)
     
     # Validate inputs

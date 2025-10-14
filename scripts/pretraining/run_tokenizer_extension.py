@@ -36,9 +36,8 @@ import logging
 REPO_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from src.pretraining.tokenizer_extension import (
-    extend_tokenizer_pipeline,
-    setup_logging
+from src.pretraining.tokenizer_extension import extend_tokenizer_pipeline
+from src.utils.logging import setup_logging
 )
 
 

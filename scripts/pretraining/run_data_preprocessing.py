@@ -46,12 +46,13 @@ REPO_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from src.pretraining.data_preprocessing import (
-    extract_text_from_xml_dir,
-    process_text_files_parallel,
-    segment_text_files_farasa,
+    process_xml,
+    process_text_files,
+    segment_data,
     split_data,
-    setup_logging
 )
+
+from src.utils.logging import setup_logging
 
 
 def parse_args():

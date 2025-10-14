@@ -13,38 +13,16 @@ Key Features:
 - Special token handling for Farasa segmentation (+ marker)
 - Memory-efficient text processing via generators
 - Vocabulary size capping (80K tokens)
-
-Original file: "Tokenizer vocab extending.py"
-Status: Logic unchanged, improved modularity and documentation`
 """
 
 import os
 import re
-import gc
 import shutil
 import logging
 import psutil
-from pathlib import Path
 from collections import Counter
-from typing import Dict, Generator, Tuple, Set, Optional, List
+from typing import Dict, Generator, Tuple, Set, Any
 from transformers import AutoTokenizer, AutoModelForMaskedLM, PreTrainedTokenizer
-
-
-def setup_logging(log_file: str = "tokenization.log") -> None:
-    """
-    Configure logging for the tokenizer extension process.
-
-    Args:
-        log_file (str): Path to log file (default: tokenization.log)
-    """
-    logging.basicConfig(
-        filename=log_file,
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        force=True
-    )
-    logging.info("Logging initialized for tokenizer extension")
-
 
 def get_memory_usage() -> str:
     """

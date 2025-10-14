@@ -32,21 +32,20 @@ Usage Examples:
         --config configs/pretraining_config.yaml
 """
 
-import sys
-import os
-from pathlib import Path
 import argparse
 import logging
+import os
+import sys
+from pathlib import Path
+
 import yaml
 
 # Add src/ to path for imports
 REPO_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from src.pretraining.trainer import (
-    train_mlm,
-    setup_logging
-)
+from src.pretraining.trainer import train_mlm
+from src.utils.logging import setup_logging
 
 
 def load_config(config_path: str) -> dict:
@@ -176,7 +175,7 @@ def main():
     args = parse_args()
     
     # Setup logging
-    setup_logging(level=getattr(logging, args.log_level))
+    setup_logging(level=getattr(logging, args.log_level), log_file="pretraining.log")
     logger = logging.getLogger(__name__)
     
     # Load config if provided
