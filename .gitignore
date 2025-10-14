@@ -41,6 +41,8 @@ conda_env/
 .ipynb_checkpoints
 
 # Data directories
+data/
+!data/README.md
 data/raw/
 data/interim/
 data/preprocessed/
