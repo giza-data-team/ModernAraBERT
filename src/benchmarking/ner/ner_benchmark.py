@@ -41,6 +41,7 @@ import time
 import psutil
 from datetime import datetime
 from typing import Dict, Tuple
+from src.utils.logging import setup_logging
 
 import numpy as np
 import torch
@@ -58,9 +59,9 @@ from transformers import (
 
 # Set up constants for model paths
 MODEL_PATHS = {
-    "modernbert": {
-        "model": r"/gpfs/helios/home/abdelrah/ModernBERT/Training2/output/checkpoint_step_13000/",
-        "tokenizer": r"/gpfs/helios/home/abdelrah/ModernBERT/Training2/Tokenizer",
+    "modernarabert": {
+        "model": "gizadatateam/ModernAraBERT",
+        "tokenizer": "gizadatateam/ModernAraBERT",
     },
     "arabert": {
         "model": "aubmindlab/bert-base-arabert",
@@ -83,11 +84,7 @@ MODEL_PATHS = {
         "tokenizer": "CAMeL-Lab/bert-base-arabic-camelbert-msa-ner",
     },
 }
-
-# Default paths for data and outputs
-DEFAULT_DATA_DIR = "./Data/"
-DEFAULT_OUTPUT_DIR = "./ner_results"
-DEFAULT_LOG_DIR = "./logs"
+DEFAULT_OUTPUT_DIR = "./data/benchmarking/ner"
 TOKEN_IGNORED_LABEL = -100  # Label for ignored tokens during training
 
 def setup_logging(log_filepath: str) -> None:
@@ -802,6 +799,16 @@ def run_inference_test(model, tokenizer, test_sentence="تقع مدينة بار
     
     # Tokenize the test sentence with word alignment
     words = test_sentence.split()  # Simple word splitting
+    # First, get word alignment info from a non-tensor tokenization to use word_ids()
+    tokenized_no_tensors = tokenizer(
+        words,
+        truncation=True,
+        is_split_into_words=True,
+        padding="max_length",
+        max_length=128,
+    )
+
+    # Then, prepare tensor inputs for the model and keep it as BatchEncoding (preserves methods like .to())
     inputs = tokenizer(
         words,
         truncation=True,
@@ -810,7 +817,7 @@ def run_inference_test(model, tokenizer, test_sentence="تقع مدينة بار
         max_length=128,
         return_tensors="pt",
     )
-    inputs = {k: v.to(device) for k, v in inputs.items()}
+    inputs = inputs.to(device)
     
     # Run model inference
     model.eval()
@@ -822,7 +829,8 @@ def run_inference_test(model, tokenizer, test_sentence="تقع مدينة بار
     predictions = torch.argmax(logits, dim=-1).squeeze().tolist()
     
     # Get word IDs to align predictions with words
-    word_ids = inputs.word_ids()
+    # Retrieve word IDs from the non-tensor tokenization
+    word_ids = tokenized_no_tensors.word_ids()
     
     # Extract word-level predictions (first subtoken only)
     word_predictions = []
@@ -1014,8 +1022,8 @@ def parse_arguments():
     parser.add_argument(
         "--model",
         type=str,
-        default="modernbert",
-        choices=["modernbert", "arabert", "mbert", "arabert2", "marbert", "camel"],
+        default="modernarabert",
+        choices=["modernarabert", "arabert", "mbert", "arabert2", "marbert", "camel"],
         help="Model architecture to benchmark"
     )
     
@@ -1072,13 +1080,13 @@ def parse_arguments():
     parser.add_argument(
         "--output-dir",
         type=str,
-        default=DEFAULT_OUTPUT_DIR,
+        default= "./results/ner",
         help="Directory to save model outputs"
     )
     parser.add_argument(
         "--log-dir",
         type=str,
-        default=DEFAULT_LOG_DIR,
+        default= "./logs/benchmarking/ner",
         help="Directory to save logs"
     )
     
@@ -1130,10 +1138,6 @@ def main():
     start_time = time.time()
     
     try:
-        # Determine if using local files
-        #! to be updated after uploading the model into huggingface hub
-        is_local = args.model == "modernbert"
-        
         # Get model and tokenizer paths
         model_path = MODEL_PATHS[args.model]["model"]
         tokenizer_path = MODEL_PATHS[args.model]["tokenizer"]
@@ -1141,8 +1145,7 @@ def main():
         # Load tokenizer
         logging.info(f"Loading tokenizer from {tokenizer_path}")
         tokenizer = AutoTokenizer.from_pretrained(
-            tokenizer_path, 
-            local_files_only=is_local
+            tokenizer_path,
         )
         
         # Process dataset
