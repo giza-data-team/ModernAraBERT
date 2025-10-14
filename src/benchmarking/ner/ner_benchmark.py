@@ -38,8 +38,8 @@ import json
 import logging
 import sys
 import time
-import psutil
 from datetime import datetime
+from src.utils.memory import get_memory_usage
 from typing import Dict, Tuple
 from src.utils.logging import setup_logging
 
@@ -86,27 +86,6 @@ MODEL_PATHS = {
 }
 DEFAULT_OUTPUT_DIR = "./data/benchmarking/ner"
 TOKEN_IGNORED_LABEL = -100  # Label for ignored tokens during training
-
-def setup_logging(log_filepath: str) -> None:
-    """
-    Set up logging configuration with file and console output.
-    
-    Args:
-        log_filepath: Path to save the log file
-    """
-    os.makedirs(os.path.dirname(log_filepath), exist_ok=True)
-    
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler(log_filepath),
-        ],
-        force=True,
-    )
-    logging.info(f"Logging initialized. Saving logs to: {log_filepath}")
-
 
 def get_unique_output_path(base_dir: str, model_name: str, dataset_name: str, epochs: int) -> str:
     """
@@ -957,53 +936,6 @@ def save_benchmark_results(
         
     logging.info(f"Benchmark results saved to {result_filepath}")
     return results_data
-
-
-def get_memory_usage():
-    """
-    Get current RAM and VRAM usage statistics.
-    
-    Returns:
-        Dict containing memory usage information:
-            - ram_used_gb: RAM currently in use (GB)
-            - ram_percent: Percentage of total RAM in use
-            - vram_used_gb: VRAM currently in use (GB)
-            - vram_total_gb: Total VRAM available (GB)
-            - vram_percent: Percentage of VRAM in use
-    """
-    memory_stats = {}
-    
-    # Get RAM usage
-    process = psutil.Process(os.getpid())
-    ram_used_bytes = process.memory_info().rss  # Resident Set Size
-    ram_used_gb = ram_used_bytes / (1024 ** 3)
-    memory_stats["ram_used_gb"] = ram_used_gb
-    memory_stats["ram_percent"] = psutil.virtual_memory().percent
-    
-    # Get VRAM usage if CUDA is available
-    if torch.cuda.is_available():
-        try:
-            vram_used_bytes = torch.cuda.memory_allocated()
-            vram_total_bytes = torch.cuda.get_device_properties(0).total_memory
-            
-            vram_used_gb = vram_used_bytes / (1024 ** 3)
-            vram_total_gb = vram_total_bytes / (1024 ** 3)
-            vram_percent = (vram_used_bytes / vram_total_bytes) * 100
-            
-            memory_stats["vram_used_gb"] = vram_used_gb
-            memory_stats["vram_total_gb"] = vram_total_gb
-            memory_stats["vram_percent"] = vram_percent
-        except Exception as e:
-            logging.warning(f"Could not get VRAM usage: {e}")
-            memory_stats["vram_used_gb"] = 0.0
-            memory_stats["vram_total_gb"] = 0.0
-            memory_stats["vram_percent"] = 0.0
-    else:
-        memory_stats["vram_used_gb"] = 0.0
-        memory_stats["vram_total_gb"] = 0.0
-        memory_stats["vram_percent"] = 0.0
-    
-    return memory_stats
 
 
 def parse_arguments():
