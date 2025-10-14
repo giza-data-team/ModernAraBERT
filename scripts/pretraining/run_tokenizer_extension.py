@@ -98,7 +98,7 @@ def main():
     args = parse_args()
     
     # Setup logging
-    setup_logging(level=getattr(logging, args.log_level), log_file="tokenizer_extension.log")
+    setup_logging(level=getattr(logging, args.log_level), log_file="./logs/tokenizer_extension.log")
     logger = logging.getLogger(__name__)
     
     # Validate inputs
