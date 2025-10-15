@@ -1049,8 +1049,8 @@ def main():
     model_output_dir = os.path.join(args.output_dir, run_id)
     result_filepath = os.path.join(args.output_dir, f"{run_id}_results.json")
     
-    # Set up logging
-    setup_logging(log_filepath)
+    # Set up logging (level, log_file)
+    setup_logging(logging.INFO, log_filepath)
     
     # Log the configuration
     logging.info("=" * 80)
