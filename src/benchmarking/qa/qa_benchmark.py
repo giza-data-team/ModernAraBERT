@@ -12,7 +12,6 @@ import random
 import numpy as np
 from collections import Counter
 from datetime import datetime
-import argparse
 from tqdm import tqdm
 from torch.optim.adamw import AdamW
 from torch.utils.data import DataLoader
@@ -24,10 +23,6 @@ from typing import Dict, Optional
 # Import shared utilities
 from utils.memory import get_memory_usage
 from utils.logging import setup_logging
-
-
-LOG_DIR = "./logs"
-os.makedirs(LOG_DIR, exist_ok=True)
 
 SEGMENTER = ArabertPreprocessor('bert-base-arabert')
 
@@ -180,11 +175,30 @@ def load_and_prepare_datasets(data_dir: str = "./data/benchmarking/qa"):
     DATA_DIR = data_dir
     if not os.path.exists(DATA_DIR):
         os.makedirs(DATA_DIR, exist_ok=True)
-        download_and_extract(GITHUB_URL, extract_to=DATA_DIR)
+
+    # Expected path of the Arabic-SQuAD file
     squad_path = os.path.join(DATA_DIR, "Arabic-SQuAD.json")
+
+    # If the expected file is missing, attempt to download/extract
     if not os.path.exists(squad_path):
-        raise FileNotFoundError(
-            f"Arabic-Squad.json not found in {DATA_DIR}. Check extracted contents or rename accordingly.")
+        logging.info(
+            f"'{os.path.basename(squad_path)}' not found under {DATA_DIR}. Attempting to download/extract QA datasets...")
+        download_and_extract(GITHUB_URL, extract_to=DATA_DIR)
+
+        # After extraction, re-check default location
+        if not os.path.exists(squad_path):
+            # Some archives may extract into nested folders; search recursively
+            found_path = None
+            for root, _, files in os.walk(DATA_DIR):
+                if "Arabic-SQuAD.json" in files:
+                    found_path = os.path.join(root, "Arabic-SQuAD.json")
+                    break
+            if found_path is not None:
+                squad_path = found_path
+                logging.info(f"Found Arabic-SQuAD.json at nested path: {squad_path}")
+            else:
+                raise FileNotFoundError(
+                    f"Arabic-Squad.json not found in {DATA_DIR} after download. Check extracted contents or rename accordingly.")
     raw_squad = load_dataset("json", data_files={"train": squad_path})["train"]
     all_flat = []
     data_list = raw_squad[0]["data"]
@@ -770,8 +784,10 @@ def run_qa_benchmark(
     log_filepath = os.path.join(log_dir, log_filename)
     os.makedirs(log_dir, exist_ok=True)
 
-    # Set up logging using shared utility
-    setup_logging(log_file=log_filepath)
+    # Set up logging using shared utility only if not already configured by wrapper
+    root_logger = logging.getLogger()
+    if not root_logger.handlers:
+        setup_logging(log_file=log_filepath)
 
     # Set random seeds for reproducibility
     random.seed(seed)
@@ -967,86 +983,3 @@ def run_qa_benchmark(
     logging.info("QA Benchmarking Complete.")
     
     return results_data
-
-def main():
-    """
-    Main entry point for QA model benchmarking using EM and F1 scores.
-
-    Parses command-line arguments and calls run_qa_benchmark function.
-    """
-    parser = argparse.ArgumentParser(
-        "QA Model Benchmarking (EM/F1)")  # Updated description
-    parser.add_argument("--model-name", type=str,
-                        default="arabert", choices=["arabert", "modernarabert", "mbert", "arabert2", "marbert"])
-    parser.add_argument("--model-path", type=str, default=None,
-                        help="Path to pretrained model (overrides default model paths)")
-    parser.add_argument("--tokenizer-path", type=str, default=None,
-                        help="Path to tokenizer (default: same as model)")
-    parser.add_argument("--data-dir", type=str, default="./data/benchmarking/qa",
-                        help="Data directory for datasets")
-    parser.add_argument("--log-dir", type=str, default="./logs",
-                        help="Directory for log files")
-    parser.add_argument("--max-length", type=int, default=512)
-    parser.add_argument("--doc-stride", type=int, default=128, help="DEPRECATED: Not used since contexts fit in max_length")
-    parser.add_argument("--batch-size", type=int, default=8)
-    parser.add_argument("--epochs", type=int, default=3)
-    parser.add_argument("--learning-rate", type=float, default=3e-5, help="Default learning rate (kept for backward compatibility)")
-    parser.add_argument("--encoder-lr", type=float, default=1e-5, help="Learning rate for encoder layers")
-    parser.add_argument("--classifier-lr", type=float, default=5e-5, help="Learning rate for classifier head")
-    parser.add_argument("--checkpoint", type=str, default=None,
-                        help="Path to save the best model checkpoint (based on eval-metric).")
-    parser.add_argument("--continue-from-checkpoint", action='store_true',  # Use action='store_true'
-                        help="Resume training from the checkpoint specified by --checkpoint.")
-    parser.add_argument("--save-every", type=int, default=None,
-                        help="Save an intermediate checkpoint every N epochs.")
-    # Removed --metric, added --eval-metric
-    parser.add_argument("--eval-metric", type=str, default="f1", choices=["f1", "em", "sm"],
-                        help="Metric used for early stopping and selecting the best checkpoint.")
-    parser.add_argument("--seed", type=int, default=42,
-                        help="Random seed for reproducibility")
-    parser.add_argument("--hf-token", type=str, default=None,
-                        help="HuggingFace token for private models")
-    args = parser.parse_args()
-
-    # Use provided model_path or default model paths
-    if args.model_path:
-        model_path = args.model_path
-    else:
-        model_paths = {
-            "arabert": "aubmindlab/bert-base-arabert",
-            "modernarabert": "gizadatateam/ModernAraBERT",
-            "mbert": "google-bert/bert-base-multilingual-cased",
-            "arabert2": "aubmindlab/bert-base-arabertv2",
-            "marbert": "UBC-NLP/MARBERTv2",
-        }
-        model_path = model_paths.get(args.model_name)
-        if not model_path:
-            logging.error(f"Unknown model: {args.model_name}")
-            return
-
-    # Call the main benchmark function
-    run_qa_benchmark(
-        model_name=args.model_name,
-        model_path=model_path,
-        tokenizer_path=args.tokenizer_path,
-        data_dir=args.data_dir,
-        log_dir=args.log_dir,
-        batch_size=args.batch_size,
-        max_length=args.max_length,
-        epochs=args.epochs,
-        learning_rate=args.learning_rate,
-        encoder_lr=args.encoder_lr,
-        classifier_lr=args.classifier_lr,
-        patience=2,  # Fixed value for backward compatibility
-        eval_metric=args.eval_metric,
-        checkpoint_path=args.checkpoint,
-        continue_from_checkpoint=args.continue_from_checkpoint,
-        save_every=args.save_every,
-        hf_token=args.hf_token,
-        seed=args.seed,
-        num_workers=0  # Fixed value for backward compatibility
-    )
-
-
-if __name__ == "__main__":
-    main()

@@ -15,12 +15,14 @@ Usage:
 import sys
 import argparse
 import logging
+from datetime import datetime
 from pathlib import Path
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from benchmarking.qa.qa_benchmark import run_qa_benchmark
+from utils.logging import setup_logging
 
 
 # Colors for output
@@ -113,12 +115,14 @@ Examples:
     data_dir = Path(args.data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    # Setup logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        handlers=[logging.StreamHandler()]
-    )
+    # Setup descriptive file logging using shared utility
+    log_dir = Path(args.log_dir)
+    log_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_filename = f"qa_benchmark_{args.model_name}_{args.epochs}ep_{timestamp}.log"
+    log_file = str(log_dir / log_filename)
+    setup_logging(level=logging.INFO, log_file=log_file)
+    logging.info(f"Logging to: {log_file}")
 
     print_colored(f"{Colors.BOLD}QA Benchmarking Script{Colors.END}")
     print_colored("=" * 50, Colors.BLUE)

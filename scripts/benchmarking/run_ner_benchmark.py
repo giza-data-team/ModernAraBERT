@@ -13,27 +13,29 @@ Usage examples:
   python scripts/benchmarking/run_ner_benchmark.py --dataset asas-ai/ANERCorp --output-dir ./results/ner
 """
 
-import sys
-import os
-import json
-import glob
 import argparse
+import glob
+import json
 import logging
+import os
+import sys
+from datetime import datetime
 from pathlib import Path
-
 
 # Add repo root and src to path for imports
 REPO_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))          # Needed for 'src.*' absolute imports inside modules
 sys.path.insert(0, str(REPO_ROOT / "src"))  # For direct 'benchmarking.*' imports
 
-try:
-    from benchmarking.ner import ner_benchmark as ner_module
-except Exception as import_error:
-    raise RuntimeError(
-        "Failed to import benchmarking.ner.ner_benchmark. "
-        "Ensure the 'src' directory is on PYTHONPATH."
-    ) from import_error
+import torch
+from benchmarking.ner import ner_benchmark as ner_module
+from benchmarking.ner.ner_benchmark import (
+    MODEL_PATHS,
+    process_ner_dataset,
+    save_benchmark_results,
+    train_ner_model,
+)
+from transformers import AutoModelForTokenClassification, AutoTokenizer
 
 
 class Colors:
@@ -134,12 +136,13 @@ def main() -> int:
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     Path(args.log_dir).mkdir(parents=True, exist_ok=True)
 
-    # Setup logging to console (module also configures file logging)
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        handlers=[logging.StreamHandler()]
-    )
+    # Setup descriptive file logging for the wrapper; module also logs internally
+    from utils.logging import setup_logging
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_filename = f"ner_benchmark_{args.model}_{args.epochs}ep_{timestamp}.log"
+    log_file = str(Path(args.log_dir) / log_filename)
+    setup_logging(level=logging.INFO, log_file=log_file)
+    logging.info(f"Logging to: {log_file}")
 
     print_colored(f"{Colors.BOLD}NER Benchmarking Script{Colors.END}")
     print_colored("=" * 50, Colors.BLUE)
@@ -147,21 +150,81 @@ def main() -> int:
     print_colored(f"Dataset: {args.dataset}", Colors.BLUE)
     print_colored(f"Output directory: {args.output_dir}", Colors.BLUE)
 
-    # Build arguments for the internal module and run
-    module_argv = build_ner_module_argv(args)
+    # Run benchmark directly via library functions (module is library-only now)
     print_colored(f"\n{Colors.BOLD}Running NER benchmark...{Colors.END}")
     print_colored("=" * 50, Colors.BLUE)
 
-    old_argv = sys.argv
-    try:
-        sys.argv = module_argv
-        exit_code = ner_module.main()
-    finally:
-        sys.argv = old_argv
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_id = f"{args.model}_{args.dataset.replace('/', '_')}_{timestamp}"
+    model_output_dir = os.path.join(args.output_dir, run_id)
+    result_filepath = os.path.join(args.output_dir, f"{run_id}_results.json")
 
-    if exit_code != 0:
-        print_colored("\n❌ NER benchmark failed", Colors.RED)
-        return 1
+    # Resolve paths
+    model_path = MODEL_PATHS[args.model]["model"]
+    tokenizer_path = MODEL_PATHS[args.model]["tokenizer"]
+
+    # Load tokenizer and dataset
+    logging.info(f"Loading tokenizer from {tokenizer_path}")
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+    logging.info(f"Processing dataset: {args.dataset}")
+    dataset, label2id, id2label = process_ner_dataset(tokenizer, args.dataset)
+
+    # Load model
+    logging.info(f"Loading model from {model_path}")
+    model = AutoModelForTokenClassification.from_pretrained(
+        model_path,
+        num_labels=len(label2id),
+        id2label=id2label,
+        label2id=label2id,
+    )
+
+    # Fine-tune strategy
+    if args.fine_tune == "head-only":
+        logging.info("Freezing base model parameters for head-only fine-tuning")
+        for param in model.base_model.parameters():
+            param.requires_grad = False
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    logging.info(f"Using device: {device}")
+    model.to(device)
+
+    # Train and evaluate
+    logging.info(f"Starting fine-tuning for {args.epochs} epochs")
+    model, _, test_metrics = train_ner_model(
+        model=model,
+        train_dataset=dataset["train"],
+        eval_dataset=dataset.get("validation"),
+        test_dataset=dataset.get("test"),
+        id2label=id2label,
+        output_dir=model_output_dir,
+        num_epochs=args.epochs,
+        learning_rate=args.learning_rate,
+        batch_size=args.batch_size,
+        gradient_accumulation_steps=args.gradient_accumulation,
+        patience=args.patience,
+    )
+
+    # Save results
+    save_benchmark_results(
+        result_filepath,
+        args.model,
+        args.dataset,
+        args.epochs,
+        args.learning_rate,
+        args.batch_size,
+        args.fine_tune,
+        args.patience,
+        test_metrics,
+    )
+
+    # Optional inference test
+    if args.inference_test:
+        try:
+            from benchmarking.ner.ner_benchmark import run_inference_test
+            logging.info("Running sample inference test")
+            run_inference_test(model, tokenizer)
+        except Exception:
+            logging.warning("Inference test skipped due to an unexpected error.")
 
     # Summarize results
     print_colored(f"\n{Colors.BOLD}Results Summary{Colors.END}")
@@ -198,11 +261,11 @@ def main() -> int:
 
         print_colored(f"\nJSON: {results_path}", Colors.BLUE)
         print_colored("\n✅ NER benchmark completed successfully!", Colors.GREEN)
+        return 0
     except Exception as e:
         print_colored(f"Failed to read results JSON: {e}", Colors.YELLOW)
         print_colored("✅ NER benchmark completed successfully!", Colors.GREEN)
-
-    return 0
+        return 0
 
 
 if __name__ == "__main__":

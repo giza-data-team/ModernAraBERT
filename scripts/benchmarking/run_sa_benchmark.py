@@ -31,6 +31,7 @@ from benchmarking.sa.datasets import (
     prepare_labr_benchmark,
     prepare_ajgt_benchmark
 )
+from utils.logging import setup_logging
 
 
 # Colors for output
@@ -162,18 +163,14 @@ def benchmark_stage(datasets: List[str], data_dir: Path, model_name: str, model_
             continue
 
         try:
-            # Configure per-dataset file logging
-            log_dir = Path(kwargs.get("log_dir", "./log/benchmarking/sa"))
+            # Configure per-dataset file logging using shared utility
+            log_dir = Path(kwargs.get("log_dir", "./logs/benchmarking/sa"))
             log_dir.mkdir(parents=True, exist_ok=True)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            log_filename = f"SA_Benchmark_{model_name}_{dataset_name}_{kwargs.get('epochs', 0)}ep_p{kwargs.get('patience', 0)}_{timestamp}.log"
-            log_filepath = log_dir / log_filename
-
-            root_logger = logging.getLogger()
-            file_handler = logging.FileHandler(str(log_filepath))
-            file_handler.setLevel(logging.INFO)
-            file_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
-            root_logger.addHandler(file_handler)
+            log_filename = f"sa_benchmark_{model_name}_{dataset_name}_{kwargs.get('epochs', 0)}ep_p{kwargs.get('patience', 0)}_{timestamp}.log"
+            log_filepath = str(log_dir / log_filename)
+            setup_logging(level=logging.INFO, log_file=log_filepath)
+            logging.info(f"Logging to: {log_filepath}")
 
             # Run benchmark
             print_colored(
@@ -199,12 +196,7 @@ def benchmark_stage(datasets: List[str], data_dir: Path, model_name: str, model_
                 f"❌ Error running benchmark on {dataset_name}: {str(e)}", Colors.RED)
             results[dataset_name] = False
         finally:
-            # Remove file handler to avoid duplicate logs in next iteration
-            try:
-                root_logger.removeHandler(file_handler)
-                file_handler.close()
-            except Exception:
-                pass
+            pass
 
     return results
 
@@ -301,12 +293,8 @@ Examples:
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     Path(args.log_dir).mkdir(parents=True, exist_ok=True)
 
-    # Setup logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        handlers=[logging.StreamHandler()]
-    )
+    # Setup console logging; per-dataset file logging is configured inside benchmark_stage
+    setup_logging(level=logging.INFO)
 
     # Prepare training kwargs
     training_kwargs = {

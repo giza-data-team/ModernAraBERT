@@ -935,102 +935,12 @@ def save_benchmark_results(
 
 
 def parse_arguments():
-    """
-    Parse command line arguments for NER benchmarking.
-    
-    Returns:
-        Parsed arguments object
-    """
-    parser = argparse.ArgumentParser(
-        description="Benchmark NER models for Arabic language",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
-    
-    # Model configuration
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="modernarabert",
-        choices=["modernarabert", "arabert", "mbert", "arabert2", "marbert", "camel"],
-        help="Model architecture to benchmark"
-    )
-    
-    # Dataset configuration
-    parser.add_argument(
-        "--dataset", 
-        type=str, 
-        default="asas-ai/ANERCorp",
-        help="HuggingFace dataset name for NER benchmark"
-    )
-    
-    # Training configuration
-    parser.add_argument(
-        "--epochs", 
-        type=int, 
-        default=3,
-        help="Number of training epochs"
-    )
-    parser.add_argument(
-        "--learning-rate", 
-        type=float, 
-        default=2e-5,
-        help="Learning rate for fine-tuning"
-    )
-    parser.add_argument(
-        "--batch-size", 
-        type=int, 
-        default=16,
-        help="Training batch size"
-    )
-    parser.add_argument(
-        "--gradient-accumulation", 
-        type=int, 
-        default=1,
-        help="Number of gradient accumulation steps"
-    )
-    parser.add_argument(
-        "--patience", 
-        type=int, 
-        default=8,
-        help="Early stopping patience (number of evaluations with no improvement)"
-    )
-    
-    # Fine-tuning strategy
-    parser.add_argument(
-        "--fine-tune",
-        type=str,
-        choices=["full", "head-only"],
-        default="head-only",
-        help="Fine-tune the full model or only the classification head"
-    )
-    
-    # Output configuration
-    parser.add_argument(
-        "--output-dir",
-        type=str,
-        default= "./results/ner",
-        help="Directory to save model outputs"
-    )
-    parser.add_argument(
-        "--log-dir",
-        type=str,
-        default= "./logs/benchmarking/ner",
-        help="Directory to save logs"
-    )
-    
-    # Test mode
-    parser.add_argument(
-        "--inference-test",
-        action="store_true",
-        help="Run a sample inference test after training"
-    )
-    
-    return parser.parse_args()
+    raise RuntimeError("This module is library-only. Use scripts/benchmarking/run_ner_benchmark.py")
 
 
 def main():
-    """Main function to run NER benchmarking"""
-    # Parse arguments
+    """Deprecated entrypoint retained for backwards compatibility; prefer wrapper script."""
+    # Parse arguments (will raise)
     args = parse_arguments()
     
     # Create output directories
@@ -1045,8 +955,10 @@ def main():
     model_output_dir = os.path.join(args.output_dir, run_id)
     result_filepath = os.path.join(args.output_dir, f"{run_id}_results.json")
     
-    # Set up logging (level, log_file)
-    setup_logging(logging.INFO, log_filepath)
+    # Set up logging only if not already configured by wrapper
+    root_logger = logging.getLogger()
+    if not root_logger.handlers:
+        setup_logging(logging.INFO, log_filepath)
     
     # Log the configuration
     logging.info("=" * 80)
@@ -1161,7 +1073,3 @@ def main():
         return 1
         
     return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
