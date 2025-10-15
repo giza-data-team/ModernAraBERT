@@ -16,6 +16,7 @@ Usage:
 import sys
 import argparse
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional
 
@@ -161,6 +162,19 @@ def benchmark_stage(datasets: List[str], data_dir: Path, model_name: str, model_
             continue
 
         try:
+            # Configure per-dataset file logging
+            log_dir = Path(kwargs.get("log_dir", "./log/benchmarking/sa"))
+            log_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            log_filename = f"SA_Benchmark_{model_name}_{dataset_name}_{kwargs.get('epochs', 0)}ep_p{kwargs.get('patience', 0)}_{timestamp}.log"
+            log_filepath = log_dir / log_filename
+
+            root_logger = logging.getLogger()
+            file_handler = logging.FileHandler(str(log_filepath))
+            file_handler.setLevel(logging.INFO)
+            file_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+            root_logger.addHandler(file_handler)
+
             # Run benchmark
             print_colored(
                 f"  Training {model_name} on {dataset_name}...", Colors.BLUE)
@@ -184,6 +198,13 @@ def benchmark_stage(datasets: List[str], data_dir: Path, model_name: str, model_
             print_colored(
                 f"❌ Error running benchmark on {dataset_name}: {str(e)}", Colors.RED)
             results[dataset_name] = False
+        finally:
+            # Remove file handler to avoid duplicate logs in next iteration
+            try:
+                root_logger.removeHandler(file_handler)
+                file_handler.close()
+            except Exception:
+                pass
 
     return results
 
@@ -233,6 +254,8 @@ Examples:
     # Data configuration
     parser.add_argument("--data-dir", default="./data/benchmarking/sa",
                         help="Data directory (default: ./data/benchmarking/sa)")
+    parser.add_argument("--output-dir", default="./results/benchmarking/sa",
+                        help="Directory to save results (default: ./results/benchmarking/sa)")
     parser.add_argument("--force-redownload", action="store_true",
                         help="Re-download even if files exist (default: skip if exists)")
 
@@ -267,14 +290,16 @@ Examples:
     # Other
     parser.add_argument("--hf-token", type=str, default=None,
                         help="HuggingFace token for private models")
-    parser.add_argument("--log-dir", type=str, default="./logs",
-                        help="Directory for log files (default: ./logs)")
+    parser.add_argument("--log-dir", type=str, default="./log/benchmarking/sa",
+                        help="Directory for log files (default: ./log/benchmarking/sa)")
 
     args = parser.parse_args()
 
     # Setup paths
     data_dir = Path(args.data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
+    Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+    Path(args.log_dir).mkdir(parents=True, exist_ok=True)
 
     # Setup logging
     logging.basicConfig(
@@ -297,6 +322,7 @@ Examples:
         "save_every": args.save_every,
         "hf_token": args.hf_token,
         "log_dir": args.log_dir,
+        "results_dir": args.output_dir,
         "seed": args.seed
     }
 

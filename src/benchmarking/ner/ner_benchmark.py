@@ -23,10 +23,6 @@ EVALUATION APPROACH: The script uses first-subtoken-only labeling during trainin
 word-level evaluation. Labels are assigned only to the first subtoken of each word, 
 with continuation subtokens marked as ignored. Evaluation metrics are computed at the 
 word level using predictions from first subtokens only, ensuring proper NER evaluation.
-
-Authors: Mohamed Maher, Abo Samy, Mariam Ashraf, Mohamed Mostafa, Ali Nasser, Ali Sameh
-Date: April 2025
-License: [Appropriate License]
 """
 
 # Set tokenizers parallelism environment variable to avoid deadlocks

@@ -29,6 +29,7 @@ import sys
 from pathlib import Path
 import argparse
 import logging
+from datetime import datetime
 
 # Add src/ to path for imports
 REPO_ROOT = Path(__file__).parent.parent.parent
@@ -108,6 +109,13 @@ def parse_args():
         help='Logging level'
     )
     
+    parser.add_argument(
+        '--log-dir',
+        type=str,
+        default=str(REPO_ROOT / 'logs' / 'pretraining' / 'data_preprocessing'),
+        help='Directory to save log files'
+    )
+    
     return parser.parse_args()
 
 
@@ -115,9 +123,30 @@ def main():
     """Main entry point for data preprocessing script."""
     args = parse_args()
     
-    # Setup logging
-    setup_logging(level=getattr(logging, args.log_level), log_file="./logs/data_preprocessing.log")
+    # Setup logging directory and descriptive filename
+    log_dir = Path(args.log_dir)
+    log_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    in_name = Path(args.input_dir).name or 'input'
+    steps = []
+    if args.all:
+        steps.append('all')
+    else:
+        if args.process_xml:
+            steps.append('xml')
+        if args.process_text:
+            steps.append('text')
+        if args.segment:
+            steps.append('segment')
+        if args.split:
+            steps.append('split')
+    steps_part = '-'.join(steps) if steps else 'none'
+    log_filename = f"data_preprocessing_{in_name}_{steps_part}_{timestamp}.log"
+    log_file = str(log_dir / log_filename)
+    
+    setup_logging(level=getattr(logging, args.log_level), log_file=log_file)
     logger = logging.getLogger(__name__)
+    logger.info(f"Logging to: {log_file}")
     
     # Validate inputs
     input_dir = Path(args.input_dir)

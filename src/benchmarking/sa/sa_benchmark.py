@@ -31,7 +31,7 @@ from .datasets import (
     load_sentiment_dataset,
 )
 from .train import train_model, evaluate_model
-from src.utils.memory import get_memory_usage
+from utils.memory import get_memory_usage
 
 
 # Suppress tokenizers parallelism warning

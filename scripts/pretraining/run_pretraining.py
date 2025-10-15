@@ -37,6 +37,7 @@ import logging
 import os
 import sys
 from pathlib import Path
+from datetime import datetime
 
 import yaml
 
@@ -188,6 +189,13 @@ def parse_args():
         help='Logging level'
     )
     
+    parser.add_argument(
+        '--log-dir',
+        type=str,
+        default=str(REPO_ROOT / 'logs' / 'pretraining' / 'training'),
+        help='Directory to save log files'
+    )
+    
     return parser.parse_args()
 
 
@@ -195,9 +203,22 @@ def main():
     """Main entry point for pretraining script."""
     args = parse_args()
     
-    # Setup logging
-    setup_logging(level=getattr(logging, args.log_level), log_file="./logs/pretraining.log")
+    # Setup logging directory and descriptive filename
+    log_dir = Path(args.log_dir)
+    log_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    model_name = Path(args.model_path).name
+    train_name = Path(args.train_dir).name
+    val_name = Path(args.val_dir).name
+    log_filename = (
+        f"pretraining_{model_name}_{train_name}-{val_name}_"
+        f"{args.num_epochs}ep_bs{args.batch_size}_lr{args.learning_rate}_ml{args.max_length}_{timestamp}.log"
+    )
+    log_file = str(log_dir / log_filename)
+    
+    setup_logging(level=getattr(logging, args.log_level), log_file=log_file)
     logger = logging.getLogger(__name__)
+    logger.info(f"Logging to: {log_file}")
     
     # Performance and environment setup (mirrors trainer helpers)
     setup_performance_optimizations(logger)
