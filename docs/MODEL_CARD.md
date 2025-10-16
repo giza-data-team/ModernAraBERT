@@ -1,17 +1,15 @@
-# Model Card: ModernAraBERT (Concise)
+# Model Card: ModernAraBERT
 
 ## Summary
 - Arabic encoder adapted from `answerdotai/ModernBERT-base` via continued pretraining on Arabic corpora (~9.8GB).
 - Strong results across SA, NER (Macro-F1), and QA EM vs. AraBERT/mBERT/MARBERT.
 - License: MIT · Paper: LREC 2026 · Hub: gizadatateam/ModernAraBERT
 
-Links: `docs/RESULTS.md` (metrics) · `docs/REPRODUCIBILITY.md` (exact commands)
+Links: [RESULTS.md](./RESULTS.md) (metrics) · [REPRODUCIBILITY.md](./REPRODUCIBILITY.md) (exact commands)
 
 ## Intended Uses
 - Masked LM, feature extraction, and transfer learning for Arabic tasks.
 - Downstream: sentiment analysis, NER, extractive QA, general classification/labeling.
-
-Out of scope: MT, open-ended generation, heavy code-switching.
 
 ## How to use
 ```python
@@ -55,11 +53,6 @@ tokenizer = AutoTokenizer.from_pretrained(name)
 | mBERT             | 25.12     |
 | MARBERT           | 23.58     |
 | **ModernAraBERT** | **27.10** |
-
-## Risks & limitations (brief)
-- Primarily MSA; some dialectal coverage.
-- Higher VRAM vs. AraBERT; see trade-offs in paper.
-- Potential biases inherited from web/news sources.
 
 ## Citation
 ```bibtex

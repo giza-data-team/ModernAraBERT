@@ -1,4 +1,4 @@
-# Reproducibility Guide (Minimal, No Containers)
+# Reproducibility Guide
 
 This guide provides the exact steps to reproduce the key results reported in the paper using pinned Python packages, fixed random seeds, and the scripts in this repository.
 

@@ -1,6 +1,6 @@
-# Pretraining (Concise)
+# Pretraining
 
-Minimal steps to reproduce ModernAraBERT pretraining. For exact seeds, pinned env, and timings see `docs/REPRODUCIBILITY.md`.
+Minimal steps to reproduce ModernAraBERT pretraining. For exact seeds, pinned env, and timings see [REPRODUCIBILITY.md](./REPRODUCIBILITY.md).
 
 ## What you need
 - Python 3.8
