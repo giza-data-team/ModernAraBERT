@@ -138,8 +138,9 @@ wandb/
 .huggingface/
 
 # Generated results
-results/
-!results/README.md
+results/sa/
+results/ner/
+results/qa/
 
 # Exclude paper LaTeX auxiliary files but keep source
 *.aux
