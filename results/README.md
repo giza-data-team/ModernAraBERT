@@ -9,9 +9,9 @@ results/
 ├── README.md (this file)
 ├── sa/
 │   └── <model_name>_<dataset_name>_<timestamp>_results.json
-├── named_entity_recognition/
+├── ner/
 │   └── <model_name>_<dataset_name>_<timestamp>_results.json
-└── question_answering/
+└── qa/
     └── <model_name>_<dataset_name>_<timestamp>_results.json
 ```
 
