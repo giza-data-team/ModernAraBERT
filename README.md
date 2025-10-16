@@ -33,6 +33,7 @@
 
 ```python
 from transformers import AutoTokenizer, AutoModelForMaskedLM
+import torch
 
 # Load model and tokenizer
 model_name = "gizadatateam/ModernAraBERT"
@@ -42,38 +43,31 @@ model = AutoModelForMaskedLM.from_pretrained(model_name)
 # Example: Masked language modeling
 text = "القاهرة هي [MASK] مصر"
 inputs = tokenizer(text, return_tensors="pt")
-outputs = model(**inputs)
+
+with torch.no_grad():
+    outputs = model(**inputs)
+
+# Find index of [MASK] token
+mask_token_index = (inputs["input_ids"] == tokenizer.mask_token_id)[0].nonzero(as_tuple=True)[0].item()
+
+# Get logits for [MASK] position
+mask_logits = outputs.logits[0, mask_token_index]
+
+# Get predicted token id (highest probability)
+predicted_token_id = mask_logits.argmax(dim=-1).item()
+
+# Decode predicted word
+predicted_word = tokenizer.decode([predicted_token_id]).strip()
+print(f"Predicted: {predicted_word}")
 ```
 
-For sequence classification, NER, or QA tasks, see our [detailed examples](./notebooks/01_quick_start.ipynb).
+For task-specific examples, see [QUICK_START.md](./QUICK_START.md).
 
 ---
 
 ## 📊 Performance
 
-ModernAraBERT achieves state-of-the-art or competitive performance across three Arabic NLP tasks:
-
-### Sentiment Analysis (Macro-F1 %)
-
-| Dataset | AraBERT v1 | mBERT | ModernAraBERT | Improvement |
-|---------|------------|-------|---------------|-------------|
-| **AJGT** | 58.0 | 61.5 | **70.5** | +12.5% |
-| **HARD** | 72.7 | 71.7 | **89.4** | **+16.7%** |
-| **LABR** | 45.5 | 45.5 | **56.5** | +11.0% |
-
-### Named Entity Recognition (Micro F1 %)
-
-| Dataset | AraBERT v1 | mBERT | ModernAraBERT |
-|---------|------------|-------|---------------|
-| **ANERCorp** | 78.9 | **90.7** | 82.1 |
-
-### Question Answering (ARCD Test %)
-
-| Metric | AraBERT v1 | mBERT | ModernAraBERT | Improvement |
-|--------|------------|-------|---------------|-------------|
-| **Exact Match** | 13.26 | 15.27 | **18.73** | +41.3% |
-| **F1-Score** | 40.82 | 46.12 | **47.18** | +15.6% |
-| **Sentence Match** | 71.47 | 63.11 | **76.66** | +7.3% |
+See consolidated tables in [docs/RESULTS.md](./docs/RESULTS.md). Reproduction commands are in [docs/REPRODUCIBILITY.md](./docs/REPRODUCIBILITY.md).
 
 ---
 
@@ -92,128 +86,24 @@ conda env create -f environment.yml
 conda activate modernarabert
 ```
 
-### Option 3: Docker
-
-```bash
-docker build -t modernarabert .
-docker run -it modernarabert
-```
-
 ---
 
-## 📁 Repository Structure
+## 📁 Next Steps
 
-```
-ModernAraBERT/
-├── src/                          # Source code modules
-│   ├── pretraining/              # Pretraining scripts
-│   ├── benchmarking/             # Benchmarking (SA, NER, QA)
-│   └── utils/                    # Shared utilities
-├── scripts/                      # Executable entry point
-│   ├── pretraining/              # Pretraining pipelines
-│   └── benchmarking/             # Benchmark evaluation
-│       ├── run_sa_benchmark.py   # Streamlined SA benchmark interface
-│       └── run_ner_benchmark.sh  # NER benchmark script
-├── configs/                      # YAML configuration files
-├── data/                         # Data download and preprocessing
-├── docs/                         # Extended documentation
-├── notebooks/                    # Jupyter notebook examples
-├── tests/                        # Unit tests
-├── results/                      # Benchmark results
-└── original_code/                # Unmodified original implementation
-```
-
----
-
-## 🎯 Usage
-
-### Pretraining
-
-1. **Download and preprocess data**:
-   ```bash
-   python scripts/pretraining/run_data_collection.py --config configs/pretraining_config.yaml
-   ```
-
-2. **Extend tokenizer vocabulary**:
-   ```bash
-   python scripts/pretraining/run_tokenizer_extension.py --input-dir ./data/processed --output-tokenizer ./tokenizer
-   ```
-
-3. **Train the model**:
-   ```bash
-   python scripts/pretraining/run_pretraining.py --config configs/pretraining_config.yaml
-   ```
-
-See [PRETRAINING.md](./docs/PRETRAINING.md) for detailed instructions.
-
-### Benchmarking
-
-#### Sentiment Analysis
-
-**Supported datasets**: HARD, LABR, AJGT
-
-**New streamlined interface** (recommended):
-```bash
-# Run full pipeline on HARD dataset
-python scripts/benchmarking/run_sa_benchmark.py --datasets hard
-
-# Run full pipeline on multiple datasets
-python scripts/benchmarking/run_sa_benchmark.py --datasets hard labr ajgt
-
-# Run only data preparation stage
-python scripts/benchmarking/run_sa_benchmark.py --stage prepare-data --datasets hard labr
-
-# Run only benchmark stage (assumes data already prepared)
-python scripts/benchmarking/run_sa_benchmark.py --stage benchmark --datasets hard
-
-# Force re-download even if files exist
-python scripts/benchmarking/run_sa_benchmark.py --datasets hard labr --force-redownload
-
-# Custom model
-python scripts/benchmarking/run_sa_benchmark.py --datasets hard --model-name arabert --model-path aubmindlab/bert-base-arabert
-```
-
-**Legacy shell script** (still supported):
-```bash
-bash scripts/benchmarking/run_sa_benchmark.sh --model-name modernbert --dataset hard
-```
-
-#### Named Entity Recognition
-
-Run NER benchmarks:
-```bash
-bash scripts/benchmarking/run_ner_benchmark.sh --model-name modernbert
-```
-
-See [BENCHMARKING.md](./docs/BENCHMARKING.md) for detailed instructions and reproducing paper results.
+- Read the [Quick Start](./QUICK_START.md) to run inference and a minimal fine-tune.
+- See [Reproducibility](./docs/REPRODUCIBILITY.md) to reproduce paper tables.
 
 ---
 
 ## 📚 Documentation
 
-- [**Pretraining Guide**](./docs/PRETRAINING.md): Complete guide to pretraining ModernAraBERT
-- [**Benchmarking Guide**](./docs/BENCHMARKING.md): How to evaluate and reproduce paper results
-- [**Dataset Documentation**](./docs/DATASETS.md): Information about training and evaluation datasets
-- [**Model Card**](./docs/MODEL_CARD.md): Detailed model specifications and ethical considerations
-
----
-
-## 🗂️ Datasets
-
-### Pretraining Corpora
-- **OSIAN**: Open Source International Arabic News
-- **Arabic Billion Words**: 1.5B words Arabic corpus
-- **Arabic Wikipedia**: Latest dump
-- **OSCAR Arabic**: OSCAR 2022 Arabic subset
-
-**Total**: ~17GB of preprocessed Arabic text, 6M+ sentences
-
-### Benchmarking Datasets
-- **Sentiment Analysis**: HARD, AJGT, LABR
-- **Named Entity Recognition**: ANERCorp
-- **Question Answering**: Arabic-SQuAD, ARCD
-
-See [DATASETS.md](./docs/DATASETS.md) for download instructions and preprocessing details.
+- [**Quick Start**](./QUICK_START.md)
+- [**Reproducibility**](./docs/REPRODUCIBILITY.md)
+- [**Results**](./docs/RESULTS.md)
+- [**Pretraining Guide**](./docs/PRETRAINING.md)
+- [**Benchmarking Guide**](./docs/BENCHMARKING.md)
+- [**Dataset Documentation**](./docs/DATASETS.md)
+- [**Model Card**](./docs/MODEL_CARD.md)
 
 ---
 
@@ -238,28 +128,14 @@ ModernAraBERT is based on **ModernBERT-base** with the following specifications:
 If you use ModernAraBERT in your research, please cite:
 
 ```bibtex
-@inproceedings{eldamaty2026modernarabert,
+@inproceedings{<paper_id>,
   title={Efficient Adaptation of English Language Models for Low-Resource and Morphologically Rich Languages: The Case of Arabic},
-  author={Eldamaty, Ahmed and Maher, Mohamed and Mostafa, Mohamed and Ashraf, Mariam and ElShawi, Radwa},
-  booktitle={Proceedings of the 2026 Joint International Conference on Computational Linguistics, Language Resources and Evaluation (LREC-COLING 2026)},
-  year={2026},
-  organization={ELRA}
+  author={Maher, Eldamaty, Ashraf, ElShawi, Mostafa},
+  booktitle={Proceedings of <conference_name>},
+  year={2025},
+  organization={<conference_name>}
 }
 ```
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
-
-### How to Contribute
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
 
 ---
 
@@ -269,21 +145,13 @@ This project is licensed under the MIT License - see the [LICENSE](./LICENSE) fi
 
 ---
 
-## 🙏 Acknowledgments
-
-- **Hugging Face** for the transformers library
-- **Answer.AI** for the ModernBERT base model
-- **Farasa** for Arabic text segmentation
-- The Arabic NLP research community
-- Giza Systems and University of Tartu
-
----
-
 ## 📧 Contact
 
-- **Ahmed Eldamaty**: ahmed.aldamati@gizasystems.com
 - **Mohamed Maher**: mohamed.abdelrahman@ut.ee
+- **Ahmed Eldamaty**: ahmed.aldamati@gizasystems.com
+- **Mariam Ashraf**: mariam.ashraf@gizasystems.com
 - **Radwa ElShawi**: radwa.elshawi@ut.ee
+- **Mohamed Mostafa**: ibrahim.mohamed@gizasystems.com
 
 For issues and questions, please use the [GitHub issue tracker](https://github.com/giza-data-team/ModernAraBERT/issues).
 
