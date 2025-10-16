@@ -1,10 +1,10 @@
-# Results Summary (Paper Alignment)
+# Results Summary
 
 This page reflects the results reported in the paper. For exact reproduction commands, see [REPRODUCIBILITY.md](./REPRODUCIBILITY.md).
 
 ---
 
-## Sentiment Analysis — Macro-F1 (seed=42)
+## Sentiment Analysis — Macro-F1
 
 | Model         | LABR  | HARD  | AJGT  |
 | ------------- | ----- | ----- | ----- |
@@ -14,14 +14,9 @@ This page reflects the results reported in the paper. For exact reproduction com
 | MARBERT       | 45.54 | 67.39 | 60.63 |
 | ModernAraBERT | 56.45 | 89.37 | 70.54 |
 
-Notes:
-
-- AJGT requires manual download; see [DATASETS.md](./DATASETS.md).
-- HARD excludes 3-star (neutral) reviews (AraBERT convention).
-
 ---
 
-## Named Entity Recognition — Macro-F1 (seed=42)
+## Named Entity Recognition — Macro-F1
 
 | Model         | NER (Macro-F1) |
 | ------------- | -------------- |
@@ -31,11 +26,9 @@ Notes:
 | MARBERT       | 7.42           |
 | ModernAraBERT | 28.23          |
 
-Note: Paper reports entity-level Macro-F1 (not token-level Micro F1).
-
 ---
 
-## Question Answering (ARCD Test) — Exact Match (EM, %) (seed=42)
+## Question Answering (ARCD Test) — Exact Match (EM, %)
 
 | Model         | EM    |
 | ------------- | ----- |
@@ -45,19 +38,9 @@ Note: Paper reports entity-level Macro-F1 (not token-level Micro F1).
 | MARBERT       | 23.58 |
 | ModernAraBERT | 27.10 |
 
-Note: Paper reports EM only for ARCD in the main table.
-
 ---
 
 ## Variance and Reproducibility
 
 - Results were obtained with fixed seed 42. Minor variations may occur with different hardware/software stacks.
 - See [REPRODUCIBILITY.md](./REPRODUCIBILITY.md) for commands, seeds, and environment notes.
-
-## Dataset Versioning
-
-- AJGT: GitHub `komari6/Arabic-twitter-corpus-AJGT` (snapshot 2024-12)
-- HARD: Hugging Face `Elnagara/hard` (binary filtered per AraBERT)
-- LABR: ACL 2013 binary version (standard split)
-- ANERCorp: Hugging Face `asas-ai/ANERCorp`
-- ARCD/Arabic-SQuAD: per original papers; splits as described in [DATASETS.md](./DATASETS.md)
