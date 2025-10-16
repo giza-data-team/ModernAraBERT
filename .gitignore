@@ -138,9 +138,8 @@ wandb/
 .huggingface/
 
 # Generated results
-results/*.csv
-results/*.json
-results/*.txt
+results/
+!results/README.md
 
 # Exclude paper LaTeX auxiliary files but keep source
 *.aux
@@ -153,6 +152,3 @@ results/*.txt
 
 # Models
 models/
-
-# Results
-results/
