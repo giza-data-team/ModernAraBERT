@@ -11,7 +11,6 @@ authors:
     given-names: "Mohamed"
     email: "mohamed.abdelrahman@ut.ee"
     affiliation: "University of Tartu"
-    orcid: "https://orcid.org/0000-0000-0000-0000"
   - family-names: "Mostafa"
     given-names: "Mohamed"
     email: "ibrahim.mohamed@gizasystems.com"
@@ -59,8 +58,3 @@ preferred-citation:
       given-names: "Mariam"
     - family-names: "ElShawi"
       given-names: "Radwa"
-  collection-title: "Proceedings of the 2026 Joint International Conference on Computational Linguistics, Language Resources and Evaluation (LREC-COLING 2026)"
-  year: 2026
-  conference:
-    name: "LREC-COLING 2026"
-
