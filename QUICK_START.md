@@ -95,7 +95,6 @@ python scripts/pretraining/run_pretraining.py --config configs/pretraining/pretr
   - [BENCHMARKING.md](./docs/BENCHMARKING.md): task-specific usage
   - [DATASETS.md](./docs/DATASETS.md): dataset details
 
-- Notebooks: explore [notebooks/](./notebooks/)
 - Configs: customize [configs/](./configs/)
 
 ## Support

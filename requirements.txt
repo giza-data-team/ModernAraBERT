@@ -1,7 +1,7 @@
 # Python 3.8.x environment; install PyTorch per your CUDA/CPU platform from pytorch.org
 # Example (CUDA 11.8): pip install torch==2.1.2+cu118 --index-url https://download.pytorch.org/whl/cu118
 
-# Core dependencies (pinned)
+# Core dependencies
 torch==2.1.2
 transformers==4.35.2
 datasets==2.14.6
