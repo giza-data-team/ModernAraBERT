@@ -1,0 +1,15 @@
+input_dir: ./data/raw/extracted
+output_dir: ./data/preprocessed
+
+# Steps
+all: false
+process_xml: false
+process_text: false
+segment: false
+split: false
+
+# Parameters
+batch_size: 1000
+
+log_dir: ./logs/pretraining/data_preprocessing
+

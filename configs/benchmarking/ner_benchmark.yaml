@@ -1,0 +1,16 @@
+model: modernarabert
+dataset: asas-ai/ANERCorp
+
+output_dir: ./results/ner
+log_dir: ./logs/benchmarking/ner
+
+batch_size: 16
+epochs: 3
+patience: 8
+learning_rate: 2e-05
+gradient_accumulation: 1
+
+fine_tune: head-only
+
+inference_test: false
+

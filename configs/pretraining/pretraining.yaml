@@ -1,0 +1,21 @@
+model_path: models/tokenizer_extension/Model
+train_dir: data/preprocessed/splits/train
+val_dir: data/preprocessed/splits/validation
+tokenizer_path: models/tokenizer_extension/Tokenizer
+output_dir: models/output
+
+num_epochs: 3
+batch_size: 32
+learning_rate: 5e-05
+max_length: 512
+grad_acc_steps: 2
+warmup_ratio: 0.001
+
+last_step: 0
+save_checkpoint_steps: 10000
+
+no_fp16: false
+no_torch_compile: false
+
+log_dir: ./logs/pretraining/training
+

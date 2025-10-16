@@ -52,6 +52,7 @@ from src.pretraining.trainer import (
     train_model,
 )
 from src.utils.logging import setup_logging
+from utils.config import parse_args_with_optional_config
 from transformers import AutoTokenizer
 
 
@@ -61,19 +62,15 @@ def load_config(config_path: str) -> dict:
         return yaml.safe_load(f)
 
 
-def parse_args():
+def build_parser():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description="Run ModernAraBERT pretraining with MLM",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     
-    # Config file
-    parser.add_argument(
-        '--config',
-        type=str,
-        help='Path to YAML config file (overrides other arguments)'
-    )
+    # Config file is handled by utils.config; keep option in defaults
+    parser.add_argument('--config', type=str, help='Path to YAML config file')
     
     # Model and data
     parser.add_argument(
@@ -196,12 +193,13 @@ def parse_args():
         help='Directory to save log files'
     )
     
-    return parser.parse_args()
+    return parser
 
 
 def main():
     """Main entry point for pretraining script."""
-    args = parse_args()
+    parser = build_parser()
+    args, _ = parse_args_with_optional_config(lambda: parser)
     
     # Setup logging directory and descriptive filename
     log_dir = Path(args.log_dir)
@@ -223,15 +221,7 @@ def main():
     # Performance and environment setup (mirrors trainer helpers)
     setup_performance_optimizations(logger)
     
-    # Load config if provided
-    if args.config:
-        logger.info(f"Loading configuration from: {args.config}")
-        config = load_config(args.config)
-        
-        # Override args with config values
-        for key, value in config.items():
-            if hasattr(args, key.replace('-', '_')):
-                setattr(args, key.replace('-', '_'), value)
+    # When using --config, values already applied by helper
     
     # Validate required arguments
     if not args.model_path:

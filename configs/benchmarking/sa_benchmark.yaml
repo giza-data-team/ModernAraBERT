@@ -1,0 +1,28 @@
+stage: null
+datasets:
+  - hard
+model_name: modernarabert
+model_path: gizadatateam/ModernAraBERT
+tokenizer_path: null
+
+data_dir: ./data/benchmarking/sa
+output_dir: ./results/benchmarking/sa
+force_redownload: false
+
+batch_size: 16
+max_length: 512
+epochs: 50
+learning_rate: 2e-05
+patience: 5
+num_workers: 2
+seed: 42
+
+no_freeze: false
+
+checkpoint: null
+continue_from_checkpoint: false
+save_every: null
+
+hf_token: null # Set your HuggingFace token here
+log_dir: ./logs/benchmarking/sa
+

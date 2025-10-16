@@ -1,0 +1,9 @@
+model_name: answerdotai/ModernBERT-base
+input_dir: data/preprocessed/segmented
+output_dir: models/tokenizer_extension
+
+max_vocab_size: 80000
+min_freq: 5
+
+log_dir: ./logs/pretraining/tokenizer_extension
+

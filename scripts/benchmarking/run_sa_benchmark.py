@@ -32,6 +32,7 @@ from benchmarking.sa.datasets import (
     prepare_ajgt_benchmark
 )
 from utils.logging import setup_logging
+from utils.config import parse_args_with_optional_config
 
 
 # Colors for output
@@ -201,7 +202,7 @@ def benchmark_stage(datasets: List[str], data_dir: Path, model_name: str, model_
     return results
 
 
-def main():
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="SA Benchmarking Script - Streamlined interface for sentiment analysis benchmarking",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -285,7 +286,12 @@ Examples:
     parser.add_argument("--log-dir", type=str, default="./log/benchmarking/sa",
                         help="Directory for log files (default: ./log/benchmarking/sa)")
 
-    args = parser.parse_args()
+    return parser
+
+
+def main():
+    parser = build_parser()
+    args, _ = parse_args_with_optional_config(lambda: parser)
 
     # Setup paths
     data_dir = Path(args.data_dir)

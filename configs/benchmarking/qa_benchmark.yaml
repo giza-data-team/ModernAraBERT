@@ -1,0 +1,23 @@
+model_name: modernarabert
+model_path: gizadatateam/ModernAraBERT
+tokenizer_path: null
+
+data_dir: ./data/benchmarking/qa
+log_dir: ./logs
+
+batch_size: 8
+max_length: 512
+epochs: 3
+learning_rate: 3e-05
+encoder_lr: 1e-05
+classifier_lr: 5e-05
+patience: 2
+eval_metric: f1
+num_workers: 0
+seed: 42
+
+checkpoint: null
+continue_from_checkpoint: false
+save_every: null
+hf_token: null
+

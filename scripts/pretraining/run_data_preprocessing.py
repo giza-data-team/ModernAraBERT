@@ -43,9 +43,10 @@ from src.pretraining.data_preprocessing import (
 )
 
 from src.utils.logging import setup_logging
+from utils.config import parse_args_with_optional_config
 
 
-def parse_args():
+def build_parser():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description="Preprocess Arabic text for ModernAraBERT pretraining",
@@ -116,12 +117,13 @@ def parse_args():
         help='Directory to save log files'
     )
     
-    return parser.parse_args()
+    return parser
 
 
 def main():
     """Main entry point for data preprocessing script."""
-    args = parse_args()
+    parser = build_parser()
+    args, _ = parse_args_with_optional_config(lambda: parser)
     
     # Setup logging directory and descriptive filename
     log_dir = Path(args.log_dir)

@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from benchmarking.qa.qa_benchmark import run_qa_benchmark
 from utils.logging import setup_logging
+from utils.config import parse_args_with_optional_config
 
 
 # Colors for output
@@ -40,7 +41,7 @@ def print_colored(message: str, color: str = Colors.END):
     print(f"{color}{message}{Colors.END}")
 
 
-def main():
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="QA Benchmarking Script - Streamlined interface for question answering benchmarking",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -109,7 +110,12 @@ Examples:
     parser.add_argument("--hf-token", type=str, default=None,
                         help="HuggingFace token for private models")
 
-    args = parser.parse_args()
+    return parser
+
+
+def main():
+    parser = build_parser()
+    args, _ = parse_args_with_optional_config(lambda: parser)
 
     # Setup paths
     data_dir = Path(args.data_dir)

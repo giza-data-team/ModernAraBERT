@@ -28,9 +28,10 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from src.pretraining.data_collection import download_and_extract_all_datasets
 from src.utils.logging import setup_logging
+from src.utils.config import parse_args_with_optional_config
 
 
-def parse_args():
+def build_parser():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description="Download ModernAraBERT pretraining datasets",
@@ -66,12 +67,13 @@ def parse_args():
         help='Directory to save log files'
     )
     
-    return parser.parse_args()
+    return parser
 
 
 def main():
     """Main entry point for data collection script."""
-    args = parse_args()
+    parser = build_parser()
+    args, _ = parse_args_with_optional_config(lambda: parser)
     
     # Setup logging directory and descriptive filename
     log_dir = Path(args.log_dir)

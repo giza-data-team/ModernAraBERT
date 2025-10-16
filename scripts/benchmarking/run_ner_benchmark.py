@@ -36,6 +36,7 @@ from benchmarking.ner.ner_benchmark import (
     train_ner_model,
 )
 from transformers import AutoModelForTokenClassification, AutoTokenizer
+from utils.config import parse_args_with_optional_config
 
 
 class Colors:
@@ -84,7 +85,7 @@ def load_metrics(results_path: str) -> dict:
     return data if isinstance(data, dict) else {}
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="NER Benchmarking Script - Streamlined interface for named entity recognition benchmarking",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -130,7 +131,12 @@ def main() -> int:
     parser.add_argument("--inference-test", action="store_true",
                         help="Run a sample inference test after training")
 
-    args = parser.parse_args()
+    return parser
+
+
+def main() -> int:
+    parser = build_parser()
+    args, _ = parse_args_with_optional_config(lambda: parser)
 
     # Ensure output directories exist
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)

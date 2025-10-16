@@ -1,0 +1,5 @@
+links_json: data/links.json
+output_dir: data/raw
+
+log_dir: ./logs/pretraining/data_collection
+
