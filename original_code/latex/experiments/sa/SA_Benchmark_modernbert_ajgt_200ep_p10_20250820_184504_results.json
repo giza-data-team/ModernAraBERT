@@ -1,0 +1,35 @@
+{
+  "configuration": {
+    "model": "modernbert",
+    "dataset": "ajgt",
+    "epochs": 200,
+    "patience": 10,
+    "batch_size": 64,
+    "learning_rate": 2e-05,
+    "max_sequence_length": 512,
+    "freeze_layers": true
+  },
+  "hardware_usage": {
+    "initial_memory": {
+      "ram_used_gb": 1.2358970642089844,
+      "ram_percent": 10.0,
+      "vram_used_gb": 0.8050799369812012,
+      "vram_total_gb": 31.7325439453125,
+      "vram_percent": 2.53707971969933
+    },
+    "final_memory": {
+      "ram_used_gb": 1.3614883422851562,
+      "ram_percent": 11.3,
+      "vram_used_gb": 0.8209552764892578,
+      "vram_total_gb": 31.7325439453125,
+      "vram_percent": 2.5871082945763275
+    }
+  },
+  "results": {
+    "modernbert": {
+      "macro_f1": 0.7053800719054957,
+      "avg_eval_loss": 0.5378151535987854,
+      "perplexity": 1.7122617435118754
+    }
+  }
+}

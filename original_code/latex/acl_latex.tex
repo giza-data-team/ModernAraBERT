@@ -1,0 +1,203 @@
+% This must be in the first 5 lines to tell arXiv to use pdfLaTeX, which is strongly recommended.
+\pdfoutput=1
+% In particular, the hyperref package requires pdfLaTeX in order to break URLs across lines.
+
+\documentclass[11pt]{article}
+
+% Change "review" to "final" to generate the final (sometimes called camera-ready) version.
+% Change to "preprint" to generate a non-anonymous version with page numbers.
+\usepackage[review]{acl}
+
+% Standard package includes
+\usepackage{times}
+\usepackage{latexsym}
+
+% For proper rendering and hyphenation of words containing Latin characters (including in bib files)
+\usepackage[T1]{fontenc}
+% For Vietnamese characters
+% \usepackage[T5]{fontenc}
+% See https://www.latex-project.org/help/documentation/encguide.pdf for other character sets
+
+% This assumes your files are encoded as UTF8
+\usepackage[utf8]{inputenc}
+
+\usepackage{booktabs} % For formal tables
+\usepackage{colortbl}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{ragged2e}
+\usepackage{hhline}
+\usepackage{hyperref}
+
+% This is not strictly necessary, and may be commented out,
+% but it will improve the layout of the manuscript,
+% and will typically save some space.
+\usepackage{microtype}
+
+% This is also not strictly necessary, and may be commented out.
+% However, it will improve the aesthetics of text in
+% the typewriter font.
+\usepackage{inconsolata}
+
+%Including images in your LaTeX document requires adding
+%additional package(s)
+\usepackage{graphicx}
+
+% If the title and author information does not fit in the area allocated, uncomment the following
+%
+%\setlength\titlebox{<dim>}
+%
+% and set <dim> to something 5cm or larger.
+
+\title{\texttt{ModernAraBERT}: Efficient Adaptation of English Language Models
+for Arabic NLP Tasks}
+
+\author{Ahmed Eldamaty \\
+Giza Systems \\
+Cairo, Egypt \\
+\texttt{ahmed.aldamati@gizasystems.com} \\
+\And Mohamed Maher \\
+University of Tartu \\
+Tartu, Estonia \\
+\texttt{mohamed.abdelrahman@ut.ee} \\
+\And Mohamed Mostafa \\
+Giza Systems \\
+Cairo, Egypt \\
+\texttt{ibrahim.mohamed@gizasystems.com} \\
+\And Mariam Ashraf \\
+Giza Systems \\
+Cairo, Egypt \\
+\texttt{mariam.ashraf@gizasystems.com} \\
+\And Radwa ElShawi \\
+University of Tartu \\
+Tartu, Estonia \\
+\texttt{radwa.elshawi@ut.ee} \\}
+
+\begin{document}
+  \maketitle
+  %\begin{abstract}
+  %  Transformer-based language models have significantly advanced natural language processing; however, their adaptation to morphologically rich languages like Arabic remains challenging. This paper introduces \texttt{ModernAraBERT}, a resource-efficient approach that effectively adapts an English-pretrained model (\texttt{ModernBERT}) to Arabic NLP tasks. Our methodology involves full pre-training on curated Arabic corpora followed by lightweight fine-tuning on downstream tasks. Comprehensive evaluation in various Arabic NLP tasks, including sentiment analysis, named recognition, and question answering, demonstrates that our approach achieves competitive or superior performance compared to established Arabic models such as \texttt{AraBERT}, with substantially lower computational requirements. Notably, \texttt{ModernAraBERT} shows marked improvements in accuracy for sentiment analysis and named entity recognition tasks, underscoring its strong transfer learning capabilities and broad applicability to Arabic NLP. This framework offers a scalable and effective strategy for extending state-of-the-art language models to Arabic and potentially other underrepresented languages.
+  %\end{abstract}
+
+ \begin{abstract}
+    Transformer-based language models have significantly advanced natural language processing; however, their adaptation to morphologically rich and dialectally diverse languages such as Arabic remains challenging. This paper introduces \texttt{ModernAraBERT}, a resource-efficient adaptation of the English-pretrained \texttt{ModernBERT} model for Arabic NLP tasks. Our approach combines full pretraining on large-scale curated Arabic corpora with lightweight fine-tuning on downstream benchmarks. We evaluate \texttt{ModernAraBERT} across key Arabic NLP tasks, including sentiment analysis, named entity recognition, and extractive question answering, comparing it against strong baselines~\texttt{AraBERTv1,2}, \texttt{MARBERT}, and \texttt{mBERT}. Experimental results show that \texttt{ModernAraBERT} consistently outperforms all baselines, achieving substantial gains in Macro-F1 and Exact Match scores. These findings highlight the effectiveness of leveraging modern English architectures for efficient cross-lingual adaptation and provide a scalable pathway for extending state-of-the-art transformer models to Arabic and other underrepresented languages.
+\end{abstract}
+
+
+  \section{Introduction}
+
+  %Transformer encoder models such as BERT~\cite{devlin-etal-2019-bert} have revolutionized the approach to language processing tasks, especially within the English language. These models are characterized by their robustness, versatility, and success across numerous NLP applications and language representation tasks~\cite{Gardazi2025}. The Arabic language presents distinctive challenges: it is morphologically rich, replete with inflections, and encompasses various dialects. Consequently, adapting existing models trained on English to Arabic entails unique difficulties~\cite{MATRANE2023101570}.
+
+  %Recent developments in Arabic NLP have been notably driven by the integration of deep learning and transformer-based architectures. The release of \texttt{AraBERT} as a pretrained model for Modern Standard Arabic (MSA) marked the inception of many subsequent Arabic BERT-based models~\cite{antoun2020arabert}. Some focus specifically on MSA, such as \texttt{CAMeLBERT}~\cite{inoue-etal-2021-interplay} and \texttt{ARBERT}~\cite{abdul-mageed-etal-2021-arbert}, which utilized carefully curated data. Others target dialectical variations, including \texttt{MARBERT}~\cite{abdul-mageed-etal-2021-arbert} and \texttt{QARiB}~\cite{abdelali2021pretraining}. However, these initiatives are primarily aimed at developing dedicated Arabic models. Such models, though effective, often incur high computational costs and require training from scratch or extensive adaptation without efficient transfer, or reducing training cost and duplication. Recently, significant advancements have been made through the introduction of \texttt{ModernBERT}~\cite{warner2024modernbert}, which modernizes encoder-only transformer architectures. \texttt{ModernBERT} addresses critical limitations of previous models by training on an extensive dataset of 2 trillion tokens. Its architecture integrates several efficiency and performance improvements, such as rotary positional embeddings (RoPE)~\cite{su2024roformer}, alternating global-local attention layers, and the utilization of GeGLU activation functions~\cite{shazeer2020glu}. These architectural enhancements, combined with a modern tokenizer optimized for diverse textual and code-related data, enable \texttt{ModernBERT} to achieve state-of-the-art performance across a broad spectrum of classification and retrieval tasks, thus providing an optimal foundation for adapting advanced language models to languages with unique linguistic challenges, such as Arabic.
+
+  %The main contributions of this paper can be summarized as follows:
+  %\begin{itemize}
+   % \item We propose a resource-efficient strategy to extend high-performing English language models to Arabic by conducting comprehensive pretraining on curated Arabic corpora, thus providing a practical alternative by adapting an existing English-pretrained model to Arabic, instead of developing an entirely new Arabic-specific model from scratch.
+
+    %\item We present \texttt{ModernAraBERT}, an adapted version of the state-of-the-art English \texttt{ModernBERT} model, specifically fine-tuned and optimized for Arabic NLP tasks.
+
+    %\item We empirically evaluate \texttt{ModernAraBERT} across three essential Arabic NLP benchmarks: sentiment analysis, named entity recognition, and question answering, demonstrating its superior performance compared to \texttt{AraBERT} baseline. Our approach significantly reduces computational overhead, enhancing accessibility and applicability for research communities and industry practitioners working with Arabic language processing.
+ % \end{itemize}
+
+
+
+
+
+
+
+
+
+
+%Transformer encoder models such as BERT~\cite{devlin-etal-2019-bert} have revolutionized natural language processing (NLP), particularly within English. These models exhibit remarkable robustness, versatility, and transferability in numerous NLP applications and representation learning tasks~\cite{Gardazi2025}. However, the Arabic language presents unique challenges: it is morphologically rich, highly inflectional, and characterized by substantial dialectal diversity. Consequently, adapting transformer-based models trained in English to Arabic remains a non-trivial endeavor~\cite{MATRANE2023101570}.
+Transformer encoder models such as BERT~\cite{devlin-etal-2019-bert} have transformed natural language processing through their robustness, versatility, and transferability across diverse tasks~\cite{Gardazi2025}. Yet, adapting these models to Arabic remains challenging due to the language’s rich morphology, complex inflection, and extensive dialectal variation~\cite{MATRANE2023101570}.
+
+The rapid progress in Arabic NLP has been driven by the introduction of transformer-based architectures specifically trained or adapted for Arabic. The release of \texttt{AraBERT}~\cite{antoun2020arabert} represented a major milestone, providing the first large-scale pretrained transformer for Modern Standard Arabic (MSA). Its successor, \texttt{AraBERTv2}~\cite{antoun2020arabert}, improved on the original through larger and more diverse pretraining data, enhanced vocabulary coverage, and refined preprocessing for Arabic tokenization. Other models extended this direction by addressing dialectal and social-media variations—most notably \texttt{MARBERT}~\cite{abdul-mageed-etal-2021-arbert}, which was trained primarily on dialectal Arabic tweets, and multilingual baselines such as \texttt{mBERT}~\cite{devlin-etal-2019-bert}, which support Arabic as part of a joint multilingual corpus. While these models have advanced Arabic NLP considerably, they often incur substantial training costs, require specialized data pipelines, and remain limited in efficiently transferring the advances from newer English architectures.
+
+%Recent developments in English transformer encoders, particularly \texttt{ModernBERT}~\cite{warner2024modernbert}, have introduced architectural and efficiency improvements that make large-scale adaptation more feasible. \texttt{ModernBERT} is trained on more than two trillion tokens and incorporates modern design features such as rotary positional embeddings (RoPE)~\cite{su2024roformer}, alternating global-local attention, and GeGLU activation functions~\cite{shazeer2020glu}. These optimizations enable strong performance with significantly improved computational efficiency, making it an ideal foundation for extending high-quality language understanding to morphologically complex languages such as Arabic.
+Recent advances in English transformer encoders, particularly \texttt{ModernBERT}~\cite{warner2024modernbert}, have introduced architectural and efficiency enhancements that enable large-scale, cost-effective adaptation. Trained on over two trillion tokens, \texttt{ModernBERT} employs rotary positional embeddings (RoPE)~\cite{su2024roformer}, global-local attention, and GeGLU activations~\cite{shazeer2020glu}, achieving strong performance with high computational efficiency—making it a robust foundation for adapting to morphologically complex languages such as Arabic.
+
+
+%The main contributions of this paper are as follows.
+%\begin{itemize}
+  %\item We propose a resource-efficient strategy to adapt a high-performing English model (\texttt{ModernBERT}) to Arabic by conducting a comprehensive pretraining on curated Arabic corpora, providing a practical alternative to developing new Arabic-specific models from scratch.
+  
+  %\item We introduce \texttt{ModernAraBERT}, an Arabic-adapted variant of \texttt{ModernBERT} optimized for key Arabic NLP tasks.
+  
+  %\item We empirically evaluated \texttt{ModernAraBERT} in three benchmarks—sentiment analysis, named entity recognition, and question answering against strong baselines including \texttt{AraBERTv1}, \texttt{AraBERTv2}, \texttt{MarBERT}, and \texttt{mBERT}. Our results show consistent and substantial improvements, demonstrating accuracy gains, thereby enhancing the accessibility of advanced transformer architectures for Arabic NLP research and applications.
+%\end{itemize}
+
+The main contributions of this paper are as follows.
+\begin{itemize}
+  \item We propose a resource-efficient strategy for adapting the English \texttt{ModernBERT} model to Arabic through comprehensive pretraining on curated Arabic corpora, offering a practical alternative to developing new Arabic-specific models from scratch.
+  
+  \item We present \texttt{ModernAraBERT}, an Arabic-adapted variant of \texttt{ModernBERT} optimized for major Arabic NLP tasks.
+  
+  \item We evaluate \texttt{ModernAraBERT} on sentiment analysis, named entity recognition, and question answering, benchmarking it against \texttt{AraBERTv1}, \texttt{AraBERTv2}, \texttt{MARBERT}, and \texttt{mBERT}. The model consistently outperforms all baselines, demonstrating significant accuracy gains for Arabic NLP research and applications.
+\end{itemize}
+
+
+  \section{Methodology}
+
+  \subsection{Pretraining Corpora}
+  For the pretraining phase, we compiled a large-scale Arabic corpus from four publicly available sources: OSIAN~\cite{zeroual-etal-2019-osian}, the Arabic Billion Words dataset~\cite{el20161}, the Arabic Wikipedia dump~\footnote{\href{https://dumps.wikimedia.org/arwiki/}{https://dumps.wikimedia.org/arwiki/}}, and the OSCAR Arabic dataset~\cite{2022arXiv220106642A}. These datasets were chosen to ensure coverage of both Modern Standard Arabic and regional variations. The raw texts were preprocessed through a series of normalization steps, including the removal of special characters, punctuation diacritics, elongation characters, and excess whitespace. To further enhance the morphological quality of the data, we used the Farasa segmenter~\cite{abdelali2016farasa} for affix and root segmentation. The final corpus included over six million sentences, totaling approximately 17~GB in size.
+
+%We extended the original \texttt{ModernBERT} tokenizer, which was trained on English corpora, by adding 80,000 Arabic-specific tokens. The extended vocabulary included segmented roots, inflected forms, and common affixes, ensuring that Arabic morphology was more faithfully captured. Frequent morphological constructions were explicitly added as standalone tokens to improve segmentation consistency and reduce fragmentation.  
+
+%The choice of 80K tokens was empirically validated. As shown in Figure~\ref{fig:vocab}, Arabic follows a long-tailed frequency distribution, where most tokens occur rarely. Our analysis of token frequency (left) and coverage versus vocabulary size (right) demonstrates that coverage improves sharply with vocabulary size but plateaus around 80K tokens. Beyond this point, additional tokens provide negligible coverage gains. Selecting 80K therefore balances corpus coverage with computational efficiency. This cutoff is also consistent with prior Arabic BERT models: \texttt{AraBERT} employs a 64K vocabulary, while \texttt{MARBERT} uses 95K.
+
+
+\subsection{Tokenization}
+We extended the original \texttt{ModernBERT} tokenizer, originally trained on English text, by incorporating 80,000 Arabic-specific tokens. The expanded vocabulary includes segmented roots, inflected forms, and common affixes to better capture Arabic morphology and reduce token fragmentation. The 80K size was selected based on coverage analysis, which showed diminishing returns beyond this threshold, balancing representational adequacy and computational efficiency. This choice also aligns with prior Arabic models, where \texttt{AraBERT} employs a 64K vocabulary and \texttt{MARBERT} uses 95K.
+
+
+\subsection{Model Training}
+Our model is based on the publicly available \texttt{ModernBERT} architecture~\href{https://huggingface.co/answerdotai/ModernBERT-base}{ModernBERT-base} with 22 transformer layers. The embedding layer was resized to accommodate the extended Arabic vocabulary. Pretraining followed the Masked Language Modeling (MLM) objective for three epochs, with sequence lengths of 128 in the first two epochs and 512 in the final epoch to balance efficiency and contextual coverage. The context length was limited to 512 tokens for comparability with baselines like \texttt{AraBERT}. Optimization used AdamW with cosine learning rate decay and gradient clipping. The training progress was tracked via loss and perplexity on a held-out validation set.
+
+The model used in this work is based on the publicly available \texttt{ModernBERT}-base~\footnote{\href{https://huggingface.co/answerdotai/ModernBERT-base}{ModernBert-Base}} architecture as shown in Figure~\ref{fig:model}.
+
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.4\textwidth]{
+      latex/ModernArabert (1).jpg
+    } % Replace with your file name
+    \caption{ModernBERT Architecture with extended tokenizer vocabulary size and
+    embedding layer}
+    \label{fig:model}
+\end{figure}
+
+Our pretrained \texttt{ModernAraBERT} has been made available~\footnote{\href{http://}{Huggingface URL will be revealed upon review}}. Training and benchmark evaluation scripts are also available in our repository~\footnote{\href{https://anonymous.4open.science/r/ModernAraBERT-823C/}{Our Repository}}.
+%https://huggingface.co/gizadatateam/ModernAraBERT
+%https://github.com/giza-data-team/ModernAraBERT
+
+\input{experiments/experiments.tex}
+
+\section{Conclusion}
+In this paper, we introduced \texttt{ModernAraBERT}, a resource-efficient adaptation of the English \texttt{ModernBERT} model for Arabic NLP. By fully pretraining on large-scale Arabic corpora and fine-tuning on downstream tasks, \texttt{ModernAraBERT} achieved consistent gains across sentiment analysis, named entity recognition, and question answering benchmarks. It outperformed strong baselines \texttt{AraBERT}, \texttt{MARBERT}, and \texttt{mBERT} with Macro-F1 improvements exceeding 10\% in sentiment analysis, more than doubling NER performance, and yielding the highest Exact Match score in QA. These results demonstrate that modern English architectures can be efficiently transferred to morphologically rich languages, providing a scalable framework for extending state-of-the-art transformer models to Arabic and other underrepresented languages.
+
+\section{Limitations}
+While \texttt{ModernAraBERT} demonstrates consistent improvements across SA, NER, and QA benchmarks, several limitations remain.  
+
+First, the adaptation approach focuses on full pretraining followed by head-only fine-tuning. While computationally efficient, this design limits deeper task-specific optimization of the encoder, which may constrain performance in tasks requiring fine-grained reasoning.  
+
+Second, the model relies on the Byte-BPE (BBPE) tokenizer used in \texttt{ModernBERT}, which differs from the WordPiece tokenizers employed by most Arabic BERT variants such as \texttt{AraBERT} and \texttt{MARBERT}. Recent findings~\cite{qarah2024comprehensive} indicate that BBPE-based models can underperform on extractive QA tasks compared to WordPiece or SentencePiece-based counterparts, particularly when precise span alignment is required. This may explain the relatively smaller performance gain observed for \texttt{ModernAraBERT} on the ARCD dataset compared to its stronger improvements in SA and NER tasks.  
+
+Finally, although the experiments cover key Arabic NLP tasks, broader evaluation on additional downstream applications and dialectal datasets would provide a more comprehensive assessment of generalization. Future work will explore tokenizer adaptations and selective layer fine-tuning to further enhance cross-task robustness.
+
+
+
+%\section*{Acknowledgments}
+%This work was supported by the project "Increasing the knowledge intensity of Ida-Viru entrepreneurship" co-funded by the European Union and the innovation hub at Giza Systems~\footnote{https://gizasystems.com}.
+
+  % Bibliography entries for the entire Anthology, followed by custom entries
+  %\bibliography{anthology,custom}
+  % Custom bibliography entries only
+  \bibliography{custom}
+
+  %\appendix
+
+  %\section{Example Appendix}
+  %\label{sec:appendix}
+
+  %This is an appendix.
+\end{document}

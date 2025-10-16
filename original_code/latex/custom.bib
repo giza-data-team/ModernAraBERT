@@ -1,43 +1,3 @@
-%%% ====================================================================
-%%%  BibTeX-file{
-%%%     author          = "David Rhead",
-%%%     version         = "1.00",
-%%%     date            = "17 Feb 1990",
-%%%     time            = "17:00 GMT",
-%%%     filename        = "test.bib",
-%%%     address         = "Cripps Computing Centre,
-%%%                        University of Nottingham,
-%%%                        University Park,
-%%%                        Nottingham,
-%%%                        NG7 2RD,
-%%%                        United Kingdom",
-%%%     telephone       = "+44 602 484848 Ext 2670",
-%%%     FAX             = "+44 602 588138",
-%%%     checksum        = "05151 839 2908 25082",
-%%%     email           = "David_Rhead at uk.ac.nott.vme (JANET)",
-%%%     codetable       = "ISO/ASCII",
-%%%     keywords        = "bibliography, citation, references",
-%%%     supported       = "no",
-%%%     docstring       = "This BibTeX database file contains entries
-%%%                        designed for testing whether a BibTeX style
-%%%                        file lays references out as recommended by
-%%%                        certain authorities.  (Note, however, that
-%%%                        the BS 1629 examples are from the 1976
-%%%                        edition.  The file needs updating to use
-%%%                        examples from the 1989 edition instead.)
-%%%
-%%%                        The checksum field above contains a CRC-16
-%%%                        checksum as the first value, followed by the
-%%%                        equivalent of the standard UNIX wc (word
-%%%                        count) utility output of lines, words, and
-%%%                        characters.  This is produced by Robert
-%%%                        Solovay's checksum utility.",
-%%%  }
-%%% ====================================================================
-%% @COMMENT{Some other standard works describing conventions for citations
-%%      and bibliographies}
-
-
 @article{antoun2020arabert,
   title={AraBERT: Transformer-based Model for Arabic Language Understanding},
   author={Antoun, Wissam and Baly, Fady and Hajj, Hazem},
@@ -404,78 +364,6 @@ url="https://doi.org/10.1007/978-3-319-67056-0_3"
   publisher={Elsevier}
 }
 
-@article{devlin2018bert,
-  title={Bert: Pre-training of deep bidirectional transformers for language understanding/arXiv preprint},
-  author={Devlin, J},
-  journal={arXiv preprint arXiv:1810.04805},
-  year={2018}
-}
-
-@article{alammary2022bert,
-  title={BERT models for Arabic text classification: a systematic review},
-  author={Alammary, Ali Saleh},
-  journal={Applied Sciences},
-  volume={12},
-  number={11},
-  pages={5720},
-  year={2022},
-  publisher={MDPI}
-}
-
-@inproceedings{farha2021benchmarking,
-  title={Benchmarking transformer-based language models for Arabic sentiment and sarcasm detection},
-  author={Farha, Ibrahim Abu and Magdy, Walid},
-  booktitle={The Sixth Arabic Natural Language Processing Workshop},
-  pages={21--31},
-  year={2021},
-  organization={Association for Computational Linguistics (ACL)}
-}
-
-@inproceedings{gururangan-etal-2020-dont,
-    title = "Don{'}t Stop Pretraining: Adapt Language Models to Domains and Tasks",
-    author = "Gururangan, Suchin  and
-      Marasovi{\'c}, Ana  and
-      Swayamdipta, Swabha  and
-      Lo, Kyle  and
-      Beltagy, Iz  and
-      Downey, Doug  and
-      Smith, Noah A.",
-    editor = "Jurafsky, Dan  and
-      Chai, Joyce  and
-      Schluter, Natalie  and
-      Tetreault, Joel",
-    booktitle = "Proceedings of the 58th Annual Meeting of the Association for Computational Linguistics",
-    month = jul,
-    year = "2020",
-    address = "Online",
-    publisher = "Association for Computational Linguistics",
-    url = "https://aclanthology.org/2020.acl-main.740/",
-    doi = "10.18653/v1/2020.acl-main.740",
-    pages = "8342--8360",
-    abstract = "Language models pretrained on text from a wide variety of sources form the foundation of today{'}s NLP. In light of the success of these broad-coverage models, we investigate whether it is still helpful to tailor a pretrained model to the domain of a target task. We present a study across four domains (biomedical and computer science publications, news, and reviews) and eight classification tasks, showing that a second phase of pretraining in-domain (domain-adaptive pretraining) leads to performance gains, under both high- and low-resource settings. Moreover, adapting to the task{'}s unlabeled data (task-adaptive pretraining) improves performance even after domain-adaptive pretraining. Finally, we show that adapting to a task corpus augmented using simple data selection strategies is an effective alternative, especially when resources for domain-adaptive pretraining might be unavailable. Overall, we consistently find that multi-phase adaptive pretraining offers large gains in task performance."
-}
-
-@inproceedings{pfeiffer-etal-2021-adapterfusion,
-    title = "{A}dapter{F}usion: Non-Destructive Task Composition for Transfer Learning",
-    author = {Pfeiffer, Jonas  and
-      Kamath, Aishwarya  and
-      R{\"u}ckl{\'e}, Andreas  and
-      Cho, Kyunghyun  and
-      Gurevych, Iryna},
-    editor = "Merlo, Paola  and
-      Tiedemann, Jorg  and
-      Tsarfaty, Reut",
-    booktitle = "Proceedings of the 16th Conference of the European Chapter of the Association for Computational Linguistics: Main Volume",
-    month = apr,
-    year = "2021",
-    address = "Online",
-    publisher = "Association for Computational Linguistics",
-    url = "https://aclanthology.org/2021.eacl-main.39/",
-    doi = "10.18653/v1/2021.eacl-main.39",
-    pages = "487--503",
-    abstract = "Sequential fine-tuning and multi-task learning are methods aiming to incorporate knowledge from multiple tasks; however, they suffer from catastrophic forgetting and difficulties in dataset balancing. To address these shortcomings, we propose AdapterFusion, a new two stage learning algorithm that leverages knowledge from multiple tasks. First, in the knowledge extraction stage we learn task specific parameters called adapters, that encapsulate the task-specific information. We then combine the adapters in a separate knowledge composition step. We show that by separating the two stages, i.e., knowledge extraction and knowledge composition, the classifier can effectively exploit the representations learned from multiple tasks in a non-destructive manner. We empirically evaluate AdapterFusion on 16 diverse NLU tasks, and find that it effectively combines various types of knowledge at different layers of the model. We show that our approach outperforms traditional strategies such as full fine-tuning as well as multi-task learning. Our code and adapters are available at AdapterHub.ml."
-}
-
 @inproceedings{obeid2020camel,
   title={CAMeL tools: An open source python toolkit for Arabic natural language processing},
   author={Obeid, Ossama and Zalmout, Nasser and Khalifa, Salam and Taji, Dima and Oudah, Mai and Alhafni, Bashar and Inoue, Go and Eryani, Fadhl and Erdmann, Alexander and Habash, Nizar},
@@ -484,10 +372,14 @@ url="https://doi.org/10.1007/978-3-319-67056-0_3"
   year={2020}
 }
 
-@inproceedings{Wiemerslage2022MorphologicalPO,
-  title={Morphological Processing of Low-Resource Languages: Where We Are and What’s Next},
-  author={Adam Wiemerslage and Miikka Silfverberg and Changbing Yang and Arya D. McCarthy and Garrett Nicolai and Eliana Colunga and Katharina Kann},
-  booktitle={Findings},
-  year={2022},
-  url={https://api.semanticscholar.org/CorpusID:247518745}
+
+@article{qarah2024comprehensive,
+  title={A comprehensive analysis of various tokenizers for arabic large language models},
+  author={Qarah, Faisal and Alsanoosy, Tawfeeq},
+  journal={Applied Sciences},
+  volume={14},
+  number={13},
+  pages={5696},
+  year={2024},
+  publisher={MDPI}
 }

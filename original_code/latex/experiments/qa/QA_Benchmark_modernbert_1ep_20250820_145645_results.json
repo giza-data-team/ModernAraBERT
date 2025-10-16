@@ -1,0 +1,51 @@
+{
+  "configuration": {
+    "model": "modernbert",
+    "epochs": 1,
+    "learning_rate": 3e-05,
+    "batch_size": 8,
+    "eval_metric_for_stopping": "f1",
+    "max_length": 512,
+    "doc_stride": 128,
+    "timestamp": "2025-08-20T15:17:08.260651"
+  },
+  "results": {
+    "exact_match": 0.1844380403458213,
+    "f1_score": 0.45251492838590973,
+    "sentence_match": 0.7377521613832853,
+    "examples": [
+      {
+        "question": "لماذا ارسل المسيح؟",
+        "ground_truth": "ليقود بني إسرائيل إلى كتاب مقدس جديد",
+        "prediction": "توقيراً لهم."
+      },
+      {
+        "question": "ماذا تقول النظرية البلدية؟",
+        "ground_truth": "أن العرب اسم علم للشعب في البدو والحضر لا مضارب القبائل فحسب،",
+        "prediction": "العرب اسم علم للشعب في البدو والحضر لا مضارب القبائل فحسب،"
+      },
+      {
+        "question": "ما هو صراع العروش ؟",
+        "ground_truth": "هو مسلسل فنتازيا ملحمي",
+        "prediction": ""
+      },
+      {
+        "question": "فى اى البلدان يعد يوم عاشوراء اجازة رسمية؟",
+        "ground_truth": "إيران، باكستان، لبنان، البحرين، الهند والعراق والجزائر.",
+        "prediction": "إيران، باكستان، لبنان، البحرين، الهند والعراق والجزائر."
+      },
+      {
+        "question": "كم نسبة سكان اسيا؟",
+        "ground_truth": "60% من سكان العالم الحاليين.",
+        "prediction": "أربع"
+      }
+    ]
+  },
+  "memory_usage": {
+    "peak_ram_gb": 1.3949356079101562,
+    "peak_ram_percent": 10.9,
+    "peak_vram_gb": 3.218845844268799,
+    "peak_vram_percent": 10.143674108877374,
+    "vram_total_gb": 31.7325439453125
+  }
+}

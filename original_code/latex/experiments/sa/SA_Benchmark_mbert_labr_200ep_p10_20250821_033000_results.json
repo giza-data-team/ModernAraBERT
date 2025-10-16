@@ -1,0 +1,35 @@
+{
+  "configuration": {
+    "model": "mbert",
+    "dataset": "labr",
+    "epochs": 200,
+    "patience": 10,
+    "batch_size": 64,
+    "learning_rate": 2e-05,
+    "max_sequence_length": 512,
+    "freeze_layers": true
+  },
+  "hardware_usage": {
+    "initial_memory": {
+      "ram_used_gb": 1.28515625,
+      "ram_percent": 12.2,
+      "vram_used_gb": 0.6628279685974121,
+      "vram_total_gb": 31.7325439453125,
+      "vram_percent": 2.0887955587163836
+    },
+    "final_memory": {
+      "ram_used_gb": 1.6558570861816406,
+      "ram_percent": 11.3,
+      "vram_used_gb": 0.6787033081054688,
+      "vram_total_gb": 31.7325439453125,
+      "vram_percent": 2.1388241335933804
+    }
+  },
+  "results": {
+    "mbert": {
+      "macro_f1": 0.4554714163822526,
+      "avg_eval_loss": 0.4414082530885935,
+      "perplexity": 1.5548953636169145
+    }
+  }
+}
