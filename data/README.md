@@ -132,63 +132,22 @@ To add a new dataset:
 
 ### Pretraining Corpus
 
-| Source | Size | Articles/Sentences | Tokens (approx) |
-|--------|------|-------------------|-----------------|
-| Arabic Billion Words (HF) | ~8GB | 3.5M+ articles | 800M+ |
-| Arabic Wikipedia (10 dumps) | ~1.8GB | 800K+ articles | 200M+ |
-| **Total** | **~9.8GB** | **4.3M+** | **1.0B+** |
+| Source                      | Size       | Articles/Sentences | Tokens (approx) |
+| --------------------------- | ---------- | ------------------ | --------------- |
+| Arabic Billion Words (HF)   | ~8GB       | 3.5M+ articles     | 800M+           |
+| Arabic Wikipedia (10 dumps) | ~1.8GB     | 800K+ articles     | 200M+           |
+| **Total**                   | **~9.8GB** | **4.3M+**          | **1.0B+**       |
 
 ### Benchmark Datasets
 
-| Task | Dataset  | Metric     |
-|------|----------|------------|
-| SA   | HARD     | Macro-F1   |
-| SA   | AJGT     | Macro-F1   |
-| SA   | LABR     | Macro-F1   |
-| NER  | ANERCorp | Macro F1   |
-| QA   | ARCD     | EM         |
+| Task | Dataset  | Metric   |
+| ---- | -------- | -------- |
+| SA   | HARD     | Macro-F1 |
+| SA   | AJGT     | Macro-F1 |
+| SA   | LABR     | Macro-F1 |
+| NER  | ANERCorp | Macro F1 |
+| QA   | ARCD     | EM       |
 
-## Data Licenses
-
-Please refer to the original dataset papers for licensing information:
-
-- **Arabic Billion Words**: CC BY-NC 4.0
-- **Arabic Wikipedia**: CC BY-SA 3.0
-- **HARD**: See original paper
-- **AJGT**: See original paper
-- **LABR**: See original paper
-- **ANERCorp**: See original paper
-- **ARCD**: See original paper
-- **Arabic-SQuAD**: See original paper
-
-## Citation
-
-If you use these datasets, please cite the original papers:
-
-```bibtex
-@article{el20161,
-  title={1.5 billion words arabic corpus},
-  author={El-Khair, Ibrahim Abu},
-  journal={arXiv preprint arXiv:1611.04033},
-  year={2016}
-}
-
-@misc{wikipedia2025,
-  title={Arabic Wikipedia Dumps},
-  author={Wikimedia Foundation},
-  year={2025},
-  url={https://dumps.wikimedia.org/arwiki/}
-}
-
-@misc{mohamedrashad2024,
-  title={Arabic Billion Words Dataset},
-  author={Mohamed Rashad},
-  year={2024},
-  url={https://huggingface.co/datasets/MohamedRashad/arabic-billion-words}
-}
-
-% Add other dataset citations as needed
-```
 
 ## Contact
 
