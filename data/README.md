@@ -8,9 +8,9 @@ This directory contains dataset configuration and download scripts for ModernAra
 data/
 ├── README.md          # This file
 ├── links.json         # Dataset download links configuration
+├── benchmarking/      # Task-specific artifacts/datasets for benchmarks (gitignored)
 ├── raw/               # Raw downloaded datasets (gitignored)
-├── interim/           # Intermediate processed data (gitignored)
-└── processed/         # Final processed datasets (gitignored)
+└── preprocessed/      # Intermediate and final processed data for pretraining (gitignored)
 ```
 
 ## Dataset Configuration (`links.json`)
@@ -23,12 +23,15 @@ The `links.json` file contains URLs for downloading pretraining corpora from two
 
 ### Text Links
 
-- **Wikipedia Dumps**: 10 Arabic Wikipedia dumps from wikimedia.org (May 2025)
-- **Multistream XML**: Compressed Wikipedia XML dumps for preprocessing
+- **Wikipedia Multistream XML (txt route)**: 10 Arabic Wikipedia multistream XML `.bz2` parts (May 2025)
+  - Keys: `wiki_dumb_txt_1` … `wiki_dumb_txt_10`
+  - Note: These URLs point to the same multistream XML `.bz2` files as in `xml_links` and are processed into extracted text during preprocessing.
 
 ### XML Links
 
-- **Wikipedia XML**: Original Wikipedia XML dumps for preprocessing (same as text_links)
+- **Wikipedia Multistream XML**: Original Arabic Wikipedia multistream XML `.bz2` parts used for XML-based preprocessing
+  - Keys: `wiki_dumb_xml_1` … `wiki_dumb_xml_10`
+  - These mirror the links under `text_links` in this repository configuration.
 
 ## Downloading Datasets
 
@@ -43,8 +46,8 @@ python scripts/pretraining/run_data_collection.py
 This will:
 
 1. Read URLs from `links.json`
-2. Download HuggingFace datasets and Wikipedia dumps to `data/raw/`
-3. Extract compressed files (.bz2 archives)
+2. Download Hugging Face datasets and Wikipedia dumps to `data/raw/`
+3. Extract compressed files (`.bz2` multistream XML) into `data/raw/extracted/`
 4. Log progress to `logs/data_collection.log`
 
 ### Benchmarking Data
@@ -52,7 +55,7 @@ This will:
 Benchmark datasets are automatically downloaded through Hugging Face `datasets` library:
 
 - **Sentiment Analysis**: HARD, AJGT, LABR
-- **NER**: ANERCorp (via CAMeL Tools)
+- **NER**: ANERCorp
 - **QA**: Arabic-SQuAD, ARCD
 
 ## Data Preprocessing
@@ -70,16 +73,36 @@ The preprocessing pipeline includes:
 Run preprocessing:
 
 ```bash
-python scripts/pretraining/run_data_collection.py --preprocess-only
+python scripts/pretraining/run_data_preprocessing.py \
+  --input-dir data/raw/extracted \
+  --output-dir data/preprocessed \
+  --all
 ```
 
-### Benchmark Data Preprocessing
+Or run individual stages (examples):
 
-Each benchmark has task-specific preprocessing:
+```bash
+# 1) Extract text from Wikipedia XML into data/preprocessed/extracted
+python scripts/pretraining/run_data_preprocessing.py --input-dir data/raw --output-dir data/preprocessed --process-xml
 
-- **SA**: Text normalization, label encoding
-- **NER**: IOB2 tagging, subword alignment
-- **QA**: Context-question pair formatting, span extraction
+# 2) Clean/normalize into data/preprocessed/processed
+python scripts/pretraining/run_data_preprocessing.py --input-dir data/preprocessed/extracted --output-dir data/preprocessed --process-text
+
+# 3) Segment into data/preprocessed/segmented
+python scripts/pretraining/run_data_preprocessing.py --input-dir data/preprocessed/processed --output-dir data/preprocessed --segment
+
+# 4) Create splits under data/preprocessed/splits
+python scripts/pretraining/run_data_preprocessing.py --input-dir data/preprocessed/segmented --output-dir data/preprocessed --split
+```
+
+### Preprocessed Data Layout
+
+Processed artifacts are organized under `data/preprocessed/`:
+
+- `extracted/`: Text extracted from Wikipedia multistream XML parts
+- `segmented/`: Text after morphological segmentation (e.g., Farasa)
+- `processed/`: Cleaned/normalized corpus ready for training
+- `splits/`: Train/validation/test splits for pretraining
 
 ## Adding Custom Datasets
 
@@ -111,76 +134,32 @@ To add a new dataset:
 
 | Source | Size | Articles/Sentences | Tokens (approx) |
 |--------|------|-------------------|-----------------|
-| Arabic Billion Words (HF) | ~8GB | 5M+ articles | 1.5B+ |
-| Arabic Wikipedia (10 dumps) | ~15GB | 1M+ articles | 500M+ |
-| **Total** | **~23GB** | **6M+** | **2B+** |
+| Arabic Billion Words (HF) | ~8GB | 3.5M+ articles | 800M+ |
+| Arabic Wikipedia (10 dumps) | ~1.8GB | 800K+ articles | 200M+ |
+| **Total** | **~9.8GB** | **4.3M+** | **1.0B+** |
 
 ### Benchmark Datasets
 
-| Task | Dataset | Train | Val | Test | Metric |
-|------|---------|-------|-----|------|--------|
-| SA | HARD | 84,585 | - | 9,398 | Macro-F1 |
-| SA | AJGT | 1,080 | 360 | 360 | Macro-F1 |
-| SA | LABR | 15,000 | 2,500 | 5,000 | Macro-F1 |
-| NER | ANERCorp | 11,800 | 1,500 | 1,700 | Micro F1 |
-| QA | ARCD | 698 + Arabic-SQuAD | - | 697 | EM/F1/SM |
+| Task | Dataset  | Metric     |
+|------|----------|------------|
+| SA   | HARD     | Macro-F1   |
+| SA   | AJGT     | Macro-F1   |
+| SA   | LABR     | Macro-F1   |
+| NER  | ANERCorp | Macro F1   |
+| QA   | ARCD     | EM         |
 
 ## Data Licenses
 
-Please refer to the original dataset papers and repositories for licensing information:
+Please refer to the original dataset papers for licensing information:
 
-- **Arabic Billion Words (HuggingFace)**: See dataset page for license
-- **Wikipedia**: CC BY-SA 3.0
+- **Arabic Billion Words**: CC BY-NC 4.0
+- **Arabic Wikipedia**: CC BY-SA 3.0
 - **HARD**: See original paper
-- **AJGT**: GitHub repository license
-- **LABR**: Research use
-- **ANERCorp**: Research use
-- **Arabic-SQuAD/ARCD**: Research use
-
-## Storage Requirements
-
-Ensure sufficient disk space:
-
-- Raw data: ~25GB
-- Processed data: ~15GB
-- Temporary files: ~10GB
-- **Total recommended**: 50GB free space
-
-## Troubleshooting
-
-### Download Issues
-
-**Problem**: Download fails or times out
-
-**Solution**:
-
-```bash
-# Retry with increased timeout
-python scripts/pretraining/run_data_collection.py --timeout 600
-```
-
-**Problem**: Google Drive rate limiting
-
-**Solution**: Wait or use alternative mirrors if available
-
-### Preprocessing Issues
-
-**Problem**: Out of memory during preprocessing
-
-**Solution**:
-
-```bash
-# Process in smaller chunks
-python scripts/pretraining/run_data_collection.py --chunk-size 1000000
-```
-
-**Problem**: Farasa segmentation errors
-
-**Solution**: Ensure Farasa is properly installed:
-
-```bash
-pip install --upgrade farasa
-```
+- **AJGT**: See original paper
+- **LABR**: See original paper
+- **ANERCorp**: See original paper
+- **ARCD**: See original paper
+- **Arabic-SQuAD**: See original paper
 
 ## Citation
 
@@ -213,7 +192,4 @@ If you use these datasets, please cite the original papers:
 
 ## Contact
 
-For dataset-related questions:
-
-- Open an issue on GitHub
-- Contact: [ahmed.aldamati@gizasystems.com](mailto:ahmed.aldamati@gizasystems.com)
+For dataset-related questions, please open an issue on GitHub.
