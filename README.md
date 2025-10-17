@@ -144,7 +144,5 @@ This project is licensed under the MIT License - see the [LICENSE](./LICENSE) fi
 
 **[⬆ back to top](#modernarabert)**
 
-Made with ❤️ by the Giza Data Team and University of Tartu
-
 </div>
 
