@@ -129,11 +129,6 @@ If you use ModernAraBERT in your research, please cite:
 
 ```bibtex
 @inproceedings{<paper_id>,
-  title={Efficient Adaptation of English Language Models for Low-Resource and Morphologically Rich Languages: The Case of Arabic},
-  author={Maher, Eldamaty, Ashraf, ElShawi, Mostafa},
-  booktitle={Proceedings of <conference_name>},
-  year={2025},
-  organization={<conference_name>}
 }
 ```
 
@@ -142,18 +137,6 @@ If you use ModernAraBERT in your research, please cite:
 ## 📜 License
 
 This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
-
----
-
-## 📧 Contact
-
-- **Mohamed Maher**: mohamed.abdelrahman@ut.ee
-- **Ahmed Eldamaty**: ahmed.aldamati@gizasystems.com
-- **Mariam Ashraf**: mariam.ashraf@gizasystems.com
-- **Radwa ElShawi**: radwa.elshawi@ut.ee
-- **Mohamed Mostafa**: ibrahim.mohamed@gizasystems.com
-
-For issues and questions, please use the [GitHub issue tracker](https://github.com/giza-data-team/ModernAraBERT/issues).
 
 ---
 
