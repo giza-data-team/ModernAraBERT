@@ -27,6 +27,7 @@ If you add your own scripts, ensure they set the same seed or pass `--seed 42` i
 
 ## Data
 
+**Benchmark Datasets** (for reproducing paper tables):
 - Datasets are downloaded automatically via [datasets](https://github.com/huggingface/datasets) where possible.
 - After download/preprocessing, you should see counts matching the [DATASETS.md](./DATASETS.md).
 
@@ -35,6 +36,12 @@ Quick dataset preparation (sentiment analysis only, see [BENCHMARKING.md](./BENC
 # Example: prepare SA data only (if the script supports staged runs)
 python scripts/benchmarking/run_sa_benchmark.py --stage prepare-data --datasets hard ajgt labr
 ```
+
+**Pretraining Data** (optional - see note below):
+- Wikipedia dump links in `data/links.json` may become unavailable as Wikimedia archives old dumps
+- If links fail, see [DATASETS.md](./DATASETS.md) for instructions on updating to current dumps
+- **Important**: Different Wikipedia versions will produce different model weights
+- To reproduce exact paper results, use the published `gizadatateam/ModernAraBERT` model from HuggingFace
 
 ## Commands to Reproduce Paper Tables
 

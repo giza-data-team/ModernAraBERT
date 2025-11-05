@@ -2,6 +2,15 @@
 
 Minimal steps to reproduce ModernAraBERT pretraining. For exact seeds, pinned env, and timings see [REPRODUCIBILITY.md](./REPRODUCIBILITY.md).
 
+## Important: Data Link Availability
+
+**Wikipedia dump links in `data/links.json` may become unavailable** as Wikimedia archives old dumps. If data collection fails:
+1. Check [DATASETS.md](./DATASETS.md) for instructions on updating links
+2. Update Wikipedia dump dates in `data/links.json` to current versions
+3. **Note**: Different Wikipedia versions will produce different model weights
+
+**Recommended**: Use the published `gizadatateam/ModernAraBERT` model from HuggingFace for inference and benchmarking.
+
 ## What you need
 - Python 3.8
 - 1× GPU (≥16GB VRAM recommended)

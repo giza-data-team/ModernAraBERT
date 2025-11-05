@@ -1,7 +1,7 @@
 # Model Card: ModernAraBERT
 
 ## Summary
-- Arabic encoder adapted from `answerdotai/ModernBERT-base` via continued pretraining on Arabic corpora (~9.8GB).
+- Arabic encoder adapted from `answerdotai/ModernBERT-base` via continued pretraining on Arabic corpora (~17GB).
 - Strong results across SA, NER (Macro-F1), and QA EM vs. AraBERT/mBERT/MARBERT.
 - License: MIT · Paper: LREC 2026 · Hub: gizadatateam/ModernAraBERT
 
