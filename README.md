@@ -121,8 +121,7 @@ ModernAraBERT is based on **ModernBERT-base** with the following specifications:
 - **Activation**: GeGLU
 - **Attention**: Alternating global-local attention
 
----
-
+<!--
 ## 📄 Citation
 
 If you use ModernAraBERT in your research, please cite:
@@ -130,9 +129,9 @@ If you use ModernAraBERT in your research, please cite:
 ```bibtex
 @inproceedings{<paper_id>,
 }
-```
 
 ---
+-->
 
 ## 📜 License
 
